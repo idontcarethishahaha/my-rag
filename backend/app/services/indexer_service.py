@@ -10,9 +10,9 @@
 """
 from __future__ import annotations
 import os
+import re
 import uuid
-import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ..config import UPLOAD_DIR, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, VECTOR_DB_TYPE, VECTOR_DB_PATH
 from ..loaders.document_loader import load_document, SUPPORTED_EXTS, get_ext
@@ -22,7 +22,7 @@ from ..store.vector_store import get_vector_store, delete_by_file
 
 @dataclass
 class IndexProgress:
-    """内存里记录文件索引进度（生产可换 Redis/DB）"""
+    """文件索引进度"""
     status: str = "pending"   # pending / indexing / done / failed
     progress: float = 0.0
     chunks_count: int = 0
@@ -31,6 +31,36 @@ class IndexProgress:
 
 
 _progress_store: dict[str, IndexProgress] = {}  # file_id -> progress
+
+
+# ==================================
+# 启动时从磁盘恢复已上传文件列表
+# ==================================
+
+# 文件命名规则: {file_id}_{filename}，file_id 是 12 位 hex
+_FILE_ID_PATTERN = re.compile(r"^([0-9a-f]{12})_(.+)$")
+
+
+def _restore_from_disk() -> None:
+    """从 uploads 目录扫描已上传的文件，恢复到内存列表"""
+    if not os.path.isdir(UPLOAD_DIR):
+        return
+    for fn in os.listdir(UPLOAD_DIR):
+        m = _FILE_ID_PATTERN.match(fn)
+        if not m:
+            continue
+        file_id = m.group(1)
+        original_name = m.group(2)
+        if file_id not in _progress_store:
+            _progress_store[file_id] = IndexProgress(
+                file_name=original_name,
+                status="done",
+                progress=1.0,
+            )
+
+
+# 模块加载时自动恢复
+_restore_from_disk()
 
 
 # ==================================
