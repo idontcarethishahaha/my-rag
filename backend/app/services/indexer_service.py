@@ -28,6 +28,8 @@ class IndexProgress:
     chunks_count: int = 0
     error: str | None = None
     file_name: str = ""
+    file_size: int = 0        # 字节数
+    file_ext: str = ""        # 扩展名（含点，如 .pdf）
 
 
 _progress_store: dict[str, IndexProgress] = {}  # file_id -> progress
@@ -52,10 +54,14 @@ def _restore_from_disk() -> None:
         file_id = m.group(1)
         original_name = m.group(2)
         if file_id not in _progress_store:
+            file_path = os.path.join(UPLOAD_DIR, fn)
+            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
             _progress_store[file_id] = IndexProgress(
                 file_name=original_name,
                 status="done",
                 progress=1.0,
+                file_size=file_size,
+                file_ext=os.path.splitext(original_name)[1].lower(),
             )
 
 
@@ -88,7 +94,11 @@ def index_uploaded_file(file_bytes: bytes, filename: str) -> dict:
         f.write(file_bytes)
 
     # 记录进度
-    _progress_store[file_id] = IndexProgress(file_name=filename, status="indexing")
+    _progress_store[file_id] = IndexProgress(
+        file_name=filename, status="indexing",
+        file_size=len(file_bytes),
+        file_ext=ext,
+    )
 
     try:
         # 2) Load
@@ -186,4 +196,6 @@ def _to_dict(p: IndexProgress) -> dict:
         "progress": p.progress,
         "chunks_count": p.chunks_count,
         "error": p.error,
+        "file_size": p.file_size,
+        "file_ext": p.file_ext,
     }

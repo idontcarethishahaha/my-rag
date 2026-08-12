@@ -62,7 +62,7 @@ VECTOR_DB_PORT = int(os.getenv("VECTOR_DB_PORT", "6333"))
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "500"))
 RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "80"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "6"))
-RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.6"))
+RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.3"))
 RAG_ENABLE_RERANK = os.getenv("RAG_ENABLE_RERANK", "false").lower() == "true"
 RAG_RERANK_TOP_N = int(os.getenv("RAG_RERANK_TOP_N", "3"))
 RAG_MAX_TOKENS_LIMIT = int(os.getenv("RAG_MAX_TOKENS_LIMIT", "8000"))

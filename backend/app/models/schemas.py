@@ -69,6 +69,11 @@ class ConversationInfo(BaseModel):
     last_message: Optional[str] = None
 
 
+class MessageItem(BaseModel):
+    role: str   # user / assistant
+    content: str
+
+
 # ---------- 通用 ----------
 class PongResponse(BaseModel):
     status: str = "ok"

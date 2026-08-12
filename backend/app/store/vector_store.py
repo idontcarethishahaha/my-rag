@@ -74,12 +74,13 @@ def get_vector_store() -> VectorStore:
 def similarity_search_with_score(
     query: str,
     k: int = 6,
-    score_threshold: float = 0.6,
+    score_threshold: float = 0.3,
     filter: Optional[dict] = None,
 ) -> list[tuple[Document, float]]:
     """
     相似度检索 + 自动按阈值过滤。
     ChromaDB: L2 距离 → 转换为 1/(1+d) 的相似度。
+    阈值默认 0.3：低于此值的结果被过滤；设为 0 则不过滤。
     """
     store = get_vector_store()
     results = store.similarity_search_with_score(query, k=k, filter=filter)
@@ -91,7 +92,7 @@ def similarity_search_with_score(
             sim = 1.0 / (1.0 + raw_score)
         else:
             sim = float(raw_score)
-        if sim >= score_threshold:
+        if score_threshold <= 0 or sim >= score_threshold:
             normalized.append((doc, sim))
 
     normalized.sort(key=lambda x: x[1], reverse=True)

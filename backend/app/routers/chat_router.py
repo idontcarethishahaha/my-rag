@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from ..services import rag_service, memory_service
-from ..models.schemas import ChatRequest, ChatResponse, ConversationInfo, PongResponse
+from ..models.schemas import ChatRequest, ChatResponse, ConversationInfo, PongResponse, MessageItem
 
 router = APIRouter(prefix="/api", tags=["对话 / RAG 问答"])
 
@@ -73,15 +73,15 @@ def chat_stream(req: ChatRequest):
 @router.get("/conversations", response_model=list[ConversationInfo])
 def list_conversations():
     mm = memory_service.get_memory_manager()
-    from datetime import datetime
+    items = mm.list_sessions()
     return [
         ConversationInfo(
             session_id=item["session_id"],
             title=item["title"],
-            created_at=datetime.now().isoformat(timespec="seconds"),
+            created_at=item["created_at"],
             last_message=item.get("last_message"),
         )
-        for item in mm.list_sessions()
+        for item in items
     ]
 
 
@@ -92,8 +92,23 @@ def clear_conversation(session_id: str):
     return {"status": "ok"}
 
 
+# -------- 获取单个会话的消息历史 --------
+@router.get("/conversations/{session_id}/messages", response_model=list[MessageItem])
+def get_conversation_messages(session_id: str):
+    mm = memory_service.get_memory_manager()
+    msgs = mm.get_messages(session_id)
+    # role: assistant -> 前端用的是 "ai"
+    return [
+        MessageItem(
+            role="ai" if m.role == "assistant" else m.role,
+            content=m.content,
+        )
+        for m in msgs
+    ]
+
+
 # -------- 工具：创建新会话 ID --------
 @router.post("/conversations/new")
 def new_conversation():
-    session_id = uuid.uuid4().hex
-    return {"session_id": session_id, "title": "新对话"}
+    mm = memory_service.get_memory_manager()
+    return mm.create_session(title="新对话")
