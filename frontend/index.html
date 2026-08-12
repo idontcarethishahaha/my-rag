@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My RAG - 智能知识库助手</title>
+
+<!-- Vue 3 + Element Plus（CDN，免安装） -->
+<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/element-plus@2.8.4/dist/index.css" />
+<script src="https://unpkg.com/element-plus@2.8.4/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/@element-plus/icons-vue@2.3.1/dist/index.iife.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ============ 全局基础 ============ */
+  * { box-sizing: border-box; }
+  html, body, #app { height: 100%; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #fafbfc;
+    color: #1f2937;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============ 三栏布局 ============ */
+  .layout { display: flex; height: 100vh; }
+
+  /* --- 左侧边栏（会话列表 + 知识库入口） --- */
+  .sidebar {
+    width: 260px;
+    background: #ffffff;
+    border-right: 1px solid #f0f0f3;
+    display: flex; flex-direction: column;
+    padding: 14px 12px;
+    gap: 12px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px 10px;
+    font-weight: 600; font-size: 15px;
+    color: #111827;
+  }
+  .brand-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg,#6366f1,#8b5cf6);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:14px;
+  }
+  .new-chat-btn {
+    width: 100%;
+    border-radius: 10px !important;
+    height: 40px;
+    font-weight: 500;
+    color: #374151 !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+  }
+  .new-chat-btn:hover { background:#eef2ff !important; }
+
+  .sidebar-section-title {
+    font-size: 12px; color: #9ca3af; font-weight: 500;
+    padding: 8px;
+  }
+  .conv-list { flex: 1; overflow-y: auto; }
+  .conv-item {
+    display:flex; align-items:center; gap: 10px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 2px;
+    transition: all .15s;
+    color: #374151;
+    font-size: 13.5px;
+  }
+  .conv-item:hover { background: #f3f4f6; }
+  .conv-item.active {
+    background: #eef2ff;
+    color: #4338ca;
+    font-weight: 500;
+  }
+  .conv-item .conv-title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .conv-item .del-btn {
+    opacity: 0; transition: opacity .15s; color: #9ca3af;
+  }
+  .conv-item:hover .del-btn { opacity: 1; }
+
+  .sidebar-footer {
+    border-top: 1px solid #f3f4f6;
+    padding-top: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .nav-item {
+    display:flex; align-items:center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px;
+    cursor: pointer; color: #4b5563;
+    font-size: 13.5px;
+  }
+  .nav-item:hover { background: #f3f4f6; color: #111827; }
+
+  /* --- 主聊天区 --- */
+  .chat-main {
+    flex: 1;
+    display: flex; flex-direction: column;
+    min-width: 0;
+    background: #fafbfc;
+    position: relative;
+  }
+
+  /* 顶部栏 */
+  .chat-topbar {
+    height: 52px;
+    border-bottom: 1px solid #f0f0f3;
+    background: #fff;
+    display:flex; align-items:center; justify-content: space-between;
+    padding: 0 20px;
+  }
+  .chat-title { font-weight: 600; color: #111827; }
+  .topbar-right { display:flex; align-items:center; gap: 10px; }
+  .model-select { min-width: 160px; }
+  .deep-think-tag {
+    font-size: 12px; color: #4338ca;
+    background: #eef2ff; padding: 3px 10px;
+    border-radius: 999px; font-weight: 500;
+  }
+
+  /* 欢迎页（空对话时） */
+  .welcome {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .welcome-icon {
+    width: 64px; height: 64px; border-radius: 20px;
+    background: linear-gradient(135deg,#6366f1,#8b5cf6);
+    display:flex; align-items:center; justify-content:center;
+    color: #fff; font-size: 28px; margin-bottom: 20px;
+    box-shadow: 0 10px 30px -10px rgba(99,102,241,.5);
+  }
+  .welcome h1 {
+    font-size: 28px; font-weight: 600;
+    margin: 0 0 10px 0; color: #111827;
+  }
+  .welcome .sub { color: #6b7280; margin-bottom: 28px; }
+  .welcome .hint-row {
+    display:flex; gap: 12px; flex-wrap: wrap;
+    justify-content: center; max-width: 700px;
+  }
+  .hint-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px; padding: 14px 18px;
+    width: 230px;
+    cursor: pointer; transition: all .15s;
+  }
+  .hint-card:hover {
+    border-color: #6366f1;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -10px rgba(99,102,241,.25);
+  }
+  .hint-card .hint-title {
+    font-weight: 600; color: #111827; margin-bottom: 6px;
+    display: flex; align-items:center; gap: 6px;
+  }
+  .hint-card .hint-desc { color: #6b7280; font-size: 13px; line-height:1.5; }
+
+  /* 消息区 */
+  .msg-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 40px;
+    display:flex; flex-direction: column; gap: 24px;
+  }
+  .msg-row { display:flex; gap: 12px; max-width: 960px; margin: 0 auto; width: 100%; }
+  .msg-row.user { flex-direction: row-reverse; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 10px;
+    display:flex; align-items:center; justify-content:center;
+    font-weight: 600; font-size: 13px; flex-shrink: 0;
+    color: #fff;
+  }
+  .avatar.ai { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
+  .avatar.user { background: #9ca3af; }
+  .msg-bubble {
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 14.5px; line-height: 1.7;
+    color: #111827;
+    max-width: 78%;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg-row.ai .msg-bubble { background: #fff; border: 1px solid #f0f0f3; }
+  .msg-row.user .msg-bubble { background: #4f46e5; color: #fff; }
+
+  .msg-row.ai .thinking {
+    font-size: 13px; color: #9ca3af;
+    display: flex; align-items: center; gap: 6px;
+    padding: 12px 4px;
+  }
+  .thinking-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #6366f1;
+    animation: bounce 1.2s infinite;
+  }
+  .thinking-dot:nth-child(2) { animation-delay: .2s; }
+  .thinking-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0);opacity:.4} 30%{transform:translateY(-4px);opacity:1} }
+
+  /* 引用来源卡片 */
+  .sources {
+    max-width: 960px; margin: -12px auto 0 auto;
+    display:flex; flex-wrap: wrap; gap: 8px;
+    padding: 0 40px 8px;
+  }
+  .source-tag {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    display:flex; align-items:center; gap: 6px;
+  }
+  .source-tag .score { color:#6366f1; font-weight:500; }
+
+  /* 底部输入区 */
+  .input-area {
+    padding: 14px 40px 22px;
+    border-top: 1px solid #f0f0f3;
+    background: #fff;
+  }
+  .input-wrapper {
+    max-width: 960px; margin: 0 auto;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 16px;
+    padding: 10px 10px 10px 16px;
+    display:flex; align-items: flex-end; gap: 10px;
+    transition: all .15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,.03);
+  }
+  .input-wrapper:focus-within {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+  }
+  .input-wrapper textarea {
+    flex: 1;
+    border: none; outline: none; resize: none;
+    font-family: inherit; font-size: 14.5px; line-height: 1.6;
+    background: transparent;
+    max-height: 180px; min-height: 32px;
+    padding: 4px 0;
+  }
+  .send-btn {
+    background: linear-gradient(135deg,#6366f1,#8b5cf6) !important;
+    border: none !important;
+    color: #fff !important;
+    width: 40px !important; height: 40px !important;
+    min-width: 40px !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+  }
+  .send-btn:disabled { opacity: .4; }
+
+  .input-tips {
+    max-width: 960px; margin: 8px auto 0;
+    text-align: center; font-size: 12px; color: #9ca3af;
+  }
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+</style>
+</head>
+
+<body>
+<div id="app">
+  <div class="layout">
+    <!-- ============ 左侧边栏 ============ -->
+    <aside class="sidebar">
+      <!-- Logo -->
+      <div class="brand">
+        <div class="brand-icon">R</div>
+        <span>My RAG</span>
+      </div>
+
+      <!-- 新对话按钮 -->
+      <el-button class="new-chat-btn" @click="newConversation">
+        <el-icon style="margin-right:6px"><Plus /></el-icon>
+        新对话
+      </el-button>
+
+      <!-- 对话列表 -->
+      <div class="sidebar-section-title">对话</div>
+      <div class="conv-list">
+        <div
+          v-for="conv in conversations"
+          :key="conv.session_id"
+          class="conv-item"
+          :class="{ active: conv.session_id === activeSessionId }"
+          @click="switchConversation(conv.session_id)"
+        >
+          <el-icon><ChatDotRound /></el-icon>
+          <span class="conv-title">{{ conv.title }}</span>
+          <el-icon class="del-btn" @click.stop="deleteConversation(conv.session_id)">
+            <Delete />
+          </el-icon>
+        </div>
+      </div>
+
+      <!-- 底部：知识库等入口 -->
+      <div class="sidebar-footer">
+        <div class="nav-item" @click="showKnowledgeDrawer = true">
+          <el-icon><Collection /></el-icon>
+          知识库
+        </div>
+        <div class="nav-item" @click="aboutDialog = true">
+          <el-icon><InfoFilled /></el-icon>
+          关于
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ 主聊天区 ============ -->
+    <main class="chat-main">
+      <!-- 顶部栏 -->
+      <div class="chat-topbar">
+        <div class="chat-title">
+          {{ activeConversation ? activeConversation.title : '新对话' }}
+        </div>
+        <div class="topbar-right">
+          <span class="deep-think-tag" v-if="enableDeepThink">🧠 深度思考</span>
+          <el-switch
+            v-model="enableDeepThink"
+            active-text="深度思考"
+            style="margin-right: 8px"
+          />
+          <el-select
+            class="model-select"
+            v-model="selectedModel"
+            size="default"
+            placeholder="选择模型"
+          >
+            <el-option label="GLM-4.5-Flash（推荐）" value="glm-4.5-flash" />
+            <el-option label="通义 Qwen-Plus" value="qwen-plus" />
+            <el-option label="GLM-4.5-Plus（高级）" value="glm-4.5-plus" />
+          </el-select>
+        </div>
+      </div>
+
+      <!-- 欢迎页 / 消息列表 -->
+      <template v-if="messages.length === 0">
+        <div class="welcome">
+          <div class="welcome-icon">🌱</div>
+          <h1>你好，我是 My RAG AI</h1>
+          <p class="sub">可以问我任何关于你知识库的问题，我会基于资料诚实回答。</p>
+          <div class="hint-row">
+            <div class="hint-card" @click="sendHint('帮我介绍上传的文档内容')">
+              <div class="hint-title">📚 文档总结</div>
+              <div class="hint-desc">帮我介绍一下上传的文档里都讲了什么</div>
+            </div>
+            <div class="hint-card" @click="sendHint('列出XX部分的要点')">
+              <div class="hint-title">📌 要点提取</div>
+              <div class="hint-desc">针对某一章节/主题，列出核心要点</div>
+            </div>
+            <div class="hint-card" @click="sendHint('对比A和B的差异')">
+              <div class="hint-title">⚖️ 对比分析</div>
+              <div class="hint-desc">对比两个概念/方案/章节的差异与优劣</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="msg-list" ref="msgListRef">
+          <div
+            v-for="(m, idx) in messages"
+            :key="idx"
+            class="msg-row"
+            :class="m.role"
+          >
+            <div class="avatar" :class="m.role">
+              <span v-if="m.role === 'ai'">R</span>
+              <span v-else>U</span>
+            </div>
+            <div>
+              <div v-if="m.role === 'ai' && m.thinking" class="thinking">
+                <span>思考中</span>
+                <span class="thinking-dot"></span>
+                <span class="thinking-dot"></span>
+                <span class="thinking-dot"></span>
+              </div>
+              <div v-else class="msg-bubble">{{ m.content }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 引用来源（上一条AI回复的sources） -->
+        <div v-if="lastSources.length" class="sources">
+          <div class="source-tag" v-for="(s,i) in lastSources" :key="i">
+            <el-icon size="12"><Document /></el-icon>
+            <span>{{ s.source_file }}</span>
+            <span class="score">{{ (s.score * 100).toFixed(0) }}%</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- 底部输入区 -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            v-model="inputText"
+            placeholder="输入问题，按 Enter 发送，Shift+Enter 换行"
+            :disabled="isStreaming"
+            @keydown="onKeydown"
+            rows="1"
+            ref="textareaRef"
+            @input="autoResize"
+          ></textarea>
+          <el-button
+            class="send-btn"
+            :disabled="!inputText.trim() || isStreaming"
+            @click="send"
+          >
+            <el-icon :size="18"><Top /></el-icon>
+          </el-button>
+        </div>
+        <p class="input-tips">内容由 AI 生成，请注意甄别。Enter 发送 · Shift+Enter 换行</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ 知识库抽屉 ============ -->
+  <el-drawer
+    v-model="showKnowledgeDrawer"
+    title="📚 知识库管理"
+    size="480px"
+  >
+    <div style="padding: 8px 4px;">
+      <el-upload
+        drag
+        multiple
+        :action="uploadAction"
+        :headers="{}"
+        :http-request="customUpload"
+        :show-file-list="true"
+        accept=".pdf,.docx,.doc,.xlsx,.xls,.md,.markdown,.txt,.html,.htm,.csv"
+      >
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div style="margin: 8px 0; color: #374151; font-weight: 500;">
+          将文件拖到此处，或 <span style="color:#6366f1;">点击上传</span>
+        </div>
+        <template #tip>
+          <div style="color:#9ca3af; font-size: 12px;">
+            支持 PDF / Word / Excel / Markdown / TXT / HTML ，入库后即可问答
+          </div>
+        </template>
+      </el-upload>
+
+      <el-divider>已索引文件</el-divider>
+
+      <el-table :data="indexedFiles" style="width:100%" v-loading="loadingFiles">
+        <el-table-column prop="file_name" label="文件名" min-width="180" />
+        <el-table-column prop="chunks_count" label="切块数" width="70" align="center" />
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="s">
+            <el-tag v-if="s.row.status==='done'" type="success" size="small">已入库</el-tag>
+            <el-tag v-else-if="s.row.status==='indexing'" type="warning" size="small">处理中</el-tag>
+            <el-tag v-else type="danger" size="small">{{ s.row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="s">
+            <el-button type="danger" link size="small" @click="deleteFile(s.row.file_id)">
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+  </el-drawer>
+
+  <el-dialog v-model="aboutDialog" title="关于 My RAG" width="440px">
+    <p><b>My RAG</b> —— 从零搭建的完整 RAG 系统</p>
+    <p>阶段一：数据加载 → 切块 → 嵌入 → 向量存储</p>
+    <p>阶段二：查询 → 检索 → 重排 → Prompt 增强 → LLM 生成 → 引用溯源</p>
+    <p style="color:#6b7280; font-size: 13px; margin-top: 16px;">
+      技术栈：FastAPI + LangChain + ChromaDB + Vue3 + Element Plus
+    </p>
+  </el-dialog>
+</div>
+
+<script>
+const { createApp, ref, computed, nextTick, onMounted } = Vue;
+
+const app = createApp({
+  setup() {
+    // ============ 后端地址 ============
+    // 强制使用绝对 URL 指向后端，避免相对路径在静态服务器下 405
+    const API_BASE = 'http://127.0.0.1:8000';
+
+    // ============ 状态 ============
+    const activeSessionId = ref('');
+    const conversations = ref([]);
+    const messages = ref([]);
+    const inputText = ref('');
+    const isStreaming = ref(false);
+    const lastSources = ref([]);
+    const selectedModel = ref('glm-4.5-flash');
+    const enableDeepThink = ref(false);
+
+    const showKnowledgeDrawer = ref(false);
+    const aboutDialog = ref(false);
+    const indexedFiles = ref([]);
+    const loadingFiles = ref(false);
+
+    const msgListRef = ref(null);
+    const textareaRef = ref(null);
+
+    const uploadAction = `${API_BASE}/api/index/upload`;
+
+    const activeConversation = computed(() =>
+      conversations.value.find(c => c.session_id === activeSessionId.value)
+    );
+
+    // ============ 工具：滚动到底部 ============
+    function scrollToBottom() {
+      nextTick(() => {
+        if (msgListRef.value) {
+          msgListRef.value.scrollTop = msgListRef.value.scrollHeight;
+        }
+      });
+    }
+
+    function autoResize() {
+      const el = textareaRef.value;
+      if (!el) return;
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+    }
+
+    // ============ 会话管理 ============
+    function newConversation() {
+      const sid = crypto.randomUUID();
+      conversations.value.unshift({
+        session_id: sid,
+        title: '新对话',
+      });
+      activeSessionId.value = sid;
+      messages.value = [];
+      lastSources.value = [];
+    }
+
+    function switchConversation(sid) {
+      activeSessionId.value = sid;
+      // 这里应该从后端/本地恢复历史，先占位
+      messages.value = messages.value; // TBD
+    }
+
+    function deleteConversation(sid) {
+      conversations.value = conversations.value.filter(c => c.session_id !== sid);
+      if (activeSessionId.value === sid) {
+        if (conversations.value.length) {
+          activeSessionId.value = conversations.value[0].session_id;
+        } else {
+          newConversation();
+        }
+      }
+    }
+
+    // ============ 发送消息（SSE 流式） ============
+    function onKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    }
+
+    function sendHint(txt) {
+      inputText.value = txt;
+      send();
+    }
+
+    async function send() {
+      const q = inputText.value.trim();
+      if (!q || isStreaming.value) return;
+      if (!activeSessionId.value) newConversation();
+
+      // 更新会话标题
+      const conv = activeConversation.value;
+      if (conv && conv.title === '新对话') {
+        conv.title = q.slice(0, 20) + (q.length > 20 ? '…' : '');
+      }
+
+      // 追加用户消息
+      messages.value.push({ role: 'user', content: q });
+      // 先放一个"思考中"的AI气泡
+      const aiMsg = { role: 'ai', content: '', thinking: true };
+      messages.value.push(aiMsg);
+      lastSources.value = [];
+      inputText.value = '';
+      isStreaming.value = true;
+      scrollToBottom();
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/chat/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            session_id: activeSessionId.value,
+            stream: true,
+          }),
+        });
+
+        if (!resp.ok) throw new Error('后端请求失败');
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE 按 \n\n 切事件
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop();   // 最后一块可能是半截
+
+          for (const part of chunks) {
+            const [evLine, dataLine] = part.split('\n');
+            if (!evLine || !dataLine) continue;
+            const event = evLine.replace('event: ', '').trim();
+            const rawData = dataLine.replace(/^data: /, '').trim();
+            let data;
+            try { data = JSON.parse(rawData); } catch { data = rawData; }
+
+            if (event === 'source') {
+              lastSources.value = data || [];
+            }
+            if (event === 'thinking') {
+              aiMsg.thinking = true;
+            }
+            if (event === 'token') {
+              if (aiMsg.thinking) {
+                aiMsg.thinking = false;
+                aiMsg.content = '';
+              }
+              aiMsg.content += data || '';
+              scrollToBottom();
+            }
+            if (event === 'done') {
+              aiMsg.thinking = false;
+              isStreaming.value = false;
+            }
+            if (event === 'error') {
+              aiMsg.thinking = false;
+              aiMsg.content = '❌ 出错了：' + (data || '未知错误');
+              isStreaming.value = false;
+            }
+          }
+        }
+      } catch (e) {
+        aiMsg.thinking = false;
+        aiMsg.content = '❌ 请求失败：' + e.message +
+          '（请确认后端已启动在 8000 端口，且 CORS 已允许）';
+        isStreaming.value = false;
+      }
+    }
+
+    // ============ 知识库：上传 + 列表 + 删除 ============
+    async function customUpload({ file }) {
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const resp = await fetch(uploadAction, { method: 'POST', body: form });
+        if (!resp.ok) {
+          // 尝试解析错误详情
+          let errMsg = `上传失败 (HTTP ${resp.status})`;
+          try {
+            const text = await resp.text();
+            const errData = JSON.parse(text);
+            errMsg = errData.detail || errData.message || errMsg;
+          } catch { /* 非 JSON 响应，用默认消息 */ }
+          throw new Error(errMsg);
+        }
+        const data = await resp.json();
+        ElementPlus.ElMessage.success(`"${file.name}" 入库成功，切成 ${data.chunks_count} 块`);
+        await loadIndexedFiles();
+      } catch (e) {
+        ElementPlus.ElMessage.error(e.message || '上传失败，请确认后端已启动');
+        throw e;
+      }
+    }
+
+    async function loadIndexedFiles() {
+      loadingFiles.value = true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/index/status`);
+        if (resp.ok) indexedFiles.value = await resp.json();
+      } catch { /* 后端未启动，留空 */ }
+      finally { loadingFiles.value = false; }
+    }
+
+    async function deleteFile(fileId) {
+      try {
+        await fetch(`${API_BASE}/api/index/${fileId}`, { method: 'DELETE' });
+        ElementPlus.ElMessage.success('已删除');
+        loadIndexedFiles();
+      } catch (e) {
+        ElementPlus.ElMessage.error(e.message);
+      }
+    }
+
+    // ============ 启动 ============
+    onMounted(() => {
+      newConversation();
+      loadIndexedFiles();
+    });
+
+    return {
+      // 状态
+      API_BASE,
+      activeSessionId, conversations, messages, inputText,
+      isStreaming, lastSources, selectedModel, enableDeepThink,
+      showKnowledgeDrawer, aboutDialog, indexedFiles, loadingFiles,
+      msgListRef, textareaRef, uploadAction, activeConversation,
+      // 方法
+      newConversation, switchConversation, deleteConversation,
+      onKeydown, sendHint, send, autoResize,
+      customUpload, loadIndexedFiles, deleteFile,
+    };
+  }
+});
+
+// 注册 Element Plus + 图标
+for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, comp);
+}
+app.use(ElementPlus);
+app.mount('#app');
+</script>
+</body>
+</html>
