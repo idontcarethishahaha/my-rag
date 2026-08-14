@@ -45,6 +45,7 @@ class ChatRequest(BaseModel):
     session_id: str = Field(description="会话ID，用于多轮对话记忆")
     stream: bool = Field(default=True, description="是否流式返回")
     top_k: Optional[int] = Field(default=None, description="覆盖默认 Top-K")
+    enable_deep_think: bool = Field(default=False, description="是否启用深度思考模式")
 
 
 class ChatResponse(BaseModel):

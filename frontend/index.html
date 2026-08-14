@@ -23,27 +23,33 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ============ 整体布局：外圆角大容器 ============ */
+  /* ============ 整体布局 ============ */
   .app-shell {
     height: 100vh;
     display: flex;
     background: #ffffff;
+    overflow: hidden;
   }
 
-  /* ============ 左侧边栏（极简，无边框）============ */
+  /* ============ 左侧边栏============ */
   .sidebar {
-    width: 200px;
-    background: #fafafa;
+    width: 220px;
+    background: #f7f8f6;
     display: flex;
     flex-direction: column;
     padding: 14px 10px;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
+    border-right: none;
   }
 
+  .brand-row {
+    display: flex; align-items: center;
+    padding: 2px 8px 10px;
+    justify-content: space-between;
+  }
   .brand {
     display: flex; align-items: center; gap: 8px;
-    padding: 2px 8px 10px;
     font-weight: 600; font-size: 14px; color: #2563eb;
   }
   .brand-icon {
@@ -52,17 +58,25 @@
     display:flex; align-items:center; justify-content:center;
     font-size: 13px;
   }
+  .brand-back {
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 16px;
+    transition: color .15s;
+    line-height: 1;
+  }
+  .brand-back:hover { color: #111827; }
 
   .new-chat-btn {
     width: 100% !important;
     border-radius: 8px !important;
-    height: 34px !important;
+    height: 36px !important;
     background: #ffffff !important;
     border: 1px solid #e5e7eb !important;
     color: #374151 !important;
     font-size: 13px !important;
     font-weight: 400 !important;
-    padding: 0 10px !important;
+    padding: 0 12px !important;
     justify-content: flex-start !important;
     box-shadow: none !important;
   }
@@ -81,6 +95,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 2px;
+    margin-right: -4px;
   }
   .conv-item {
     display: flex; align-items: center; gap: 8px;
@@ -93,18 +108,21 @@
     font-size: 13px;
     position: relative;
   }
-  .conv-item:hover { background: #f0f0f0; color: #111827; }
+  .conv-item:hover { background: #ececec; color: #111827; }
   .conv-item.active {
     background: #e8e9e8;
     color: #111827;
     font-weight: 500;
   }
-  .conv-item.active::before {
-    content: '⋄';
+  .conv-item .conv-diamond {
     color: #9ca3af;
     font-size: 10px;
-    margin-right: 2px;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .15s;
   }
+  .conv-item.active .conv-diamond { opacity: 1; }
   .conv-item .conv-title {
     flex: 1;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -112,33 +130,14 @@
   .conv-item .del-btn {
     opacity: 0; color: #9ca3af;
     transition: opacity .15s;
+    flex-shrink: 0;
   }
   .conv-item:hover .del-btn { opacity: 1; }
   .conv-item .del-btn:hover { color: #ef4444; }
 
   .sidebar-footer {
-    border-top: 1px solid #ededed;
-    padding-top: 8px;
     margin-top: auto;
   }
-  .nav-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    color: #4b5563;
-    font-size: 13px;
-    transition: background .12s;
-  }
-  .nav-item:hover { background: #f0f0f0; color: #111827; }
-  .nav-item .badge {
-    margin-left: auto;
-    background: #22c55e; color: #fff;
-    font-size: 10.5px;
-    padding: 1px 7px; border-radius: 999px;
-    font-weight: 500;
-  }
-
   .sidebar-tip {
     font-size: 11px; color: #b5b8bc;
     padding: 8px 10px 0;
@@ -155,23 +154,25 @@
     position: relative;
   }
 
-  /* 顶栏：极简，只有会话标题 + 回到博客（放知识库按钮） */
+  /* 顶栏：极简，只有返回箭头 + 会话标题 + 知识库按钮 */
   .topbar {
-    height: 44px;
+    height: 48px;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 28px;
     background: #fff;
+    border-bottom: none;
   }
   .topbar-left {
     display: flex; align-items: center; gap: 10px;
   }
   .topbar-back {
-    color: #9ca3af; cursor: pointer; font-size: 16px;
+    color: #9ca3af; cursor: pointer; font-size: 18px;
     transition: color .15s;
+    line-height: 1;
   }
   .topbar-back:hover { color: #111827; }
   .topbar-title {
-    font-size: 14px; color: #111827; font-weight: 500;
+    font-size: 14px; color: #111827; font-weight: 600;
   }
   .topbar-right {
     font-size: 13px; color: #6b7280; cursor: pointer;
@@ -186,16 +187,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 120px;
+    padding-top: 130px;
     position: relative;
   }
   .welcome::after {
     content: '';
     position: absolute;
-    bottom: 140px;
+    bottom: 160px;
     left: 50%; transform: translateX(-50%);
-    width: 600px; height: 300px;
-    background: radial-gradient(ellipse at center, rgba(34,197,94,0.06) 0%, transparent 70%);
+    width: 620px; height: 320px;
+    background: radial-gradient(ellipse at center, rgba(34,197,94,0.05) 0%, transparent 70%);
     pointer-events: none;
   }
   .welcome-icon {
@@ -229,7 +230,7 @@
   }
   .msg-row {
     display: flex; gap: 14px;
-    margin-bottom: 24px;
+    margin-bottom: 26px;
   }
   .msg-row.user { flex-direction: row-reverse; }
   .avatar {
@@ -238,15 +239,77 @@
     font-size: 12px; font-weight: 600; flex-shrink: 0;
   }
   .avatar.ai { background: #ecfdf5; color: #16a34a; }
-  .avatar.user { background: #111827; color: #fff; font-weight: 500; font-size: 11px; }
+  .avatar.user { background: #f3f4f6; color: #374151; font-weight: 500; font-size: 11px; }
 
   .msg-content { flex: 1; min-width: 0; }
 
-  /* 思考中 */
-  .thinking {
+  /* 可折叠思考过程块 */
+  .thinking-block {
+    margin-bottom: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fafafa;
+    transition: border-color .2s, background .2s;
+  }
+  .thinking-block:hover {
+    border-color: #d1d5db;
+    background: #f6f7f6;
+  }
+  .thinking-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .thinking-header-left {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .thinking-sparkle {
+    color: #f59e0b;
+    font-size: 13px;
+  }
+  .thinking-toggle {
+    color: #9ca3af;
+    font-size: 12px;
+    display: flex; align-items: center; gap: 4px;
+    transition: transform .2s;
+  }
+  .thinking-toggle .chev {
+    transition: transform .2s;
+    display: inline-block;
+  }
+  .thinking-block.open .thinking-toggle .chev {
+    transform: rotate(180deg);
+  }
+  .thinking-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .25s ease;
+    padding: 0 14px;
+  }
+  .thinking-block.open .thinking-body {
+    max-height: 600px;
+    padding: 4px 14px 12px;
+    overflow-y: auto;
+  }
+  .thinking-content {
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: #6b7280;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .thinking-content p { margin: 4px 0; }
+
+  /* 思考中（loading 状态） */
+  .thinking-loading {
     font-size: 13px; color: #9ca3af;
     display: flex; align-items: center; gap: 8px;
-    padding: 6px 0 10px;
+    padding: 2px 0 10px;
   }
   .thinking-dot {
     width: 5px; height: 5px; border-radius: 50%;
@@ -271,7 +334,7 @@
     word-break: break-word;
   }
 
-  /* Markdown 样式（极简） */
+  /* Markdown 样式 */
   .msg-bubble.markdown-body h1,
   .msg-bubble.markdown-body h2,
   .msg-bubble.markdown-body h3 {
@@ -363,8 +426,8 @@
     display: flex; align-items: center; gap: 10px;
     margin-bottom: 8px;
   }
-  /* 模型标签（固定：只有 glm-4.5-flash，不再是下拉） */
-  .model-tag {
+  /* 模型下拉：✦ + 绿点 */
+  .model-select {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 10px 4px 8px;
     border-radius: 7px;
@@ -373,40 +436,61 @@
     font-size: 12px;
     color: #111827;
     user-select: none;
+    cursor: pointer;
+    transition: all .15s;
   }
-  .model-tag .dot {
+  .model-select:hover {
+    border-color: #d1d5db;
+    background: #fafafa;
+  }
+  .model-select .sparkle {
+    color: #22c55e;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .model-select .dot {
     width: 6px; height: 6px; border-radius: 50%;
     background: #22c55e;
+    flex-shrink: 0;
   }
-  .model-tag .model-name { font-weight: 500; }
-  .model-tag .model-sub {
-    color: #9ca3af; margin-left: 2px;
+  .model-select .model-name { font-weight: 500; }
+  .model-select .model-sub {
+    color: #9ca3af;
+  }
+  .model-select .chev {
+    color: #9ca3af;
+    font-size: 10px;
+    margin-left: 2px;
   }
 
-  /* 深度思考按钮（黑底） */
+  /* 深度思考按钮（黑底白字）*/
   .deep-think-btn {
-    background: #111827 !important;
-    color: #ffffff !important;
-    border: none !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #e5e7eb !important;
     padding: 4px 12px !important;
     border-radius: 8px !important;
     height: 26px !important;
     font-size: 12px !important;
     font-weight: 500 !important;
+    transition: all .15s !important;
+  }
+  .deep-think-btn:hover {
+    border-color: #d1d5db !important;
   }
   .deep-think-btn.on {
-    background: #ffffff !important;
-    color: #111827 !important;
-    border: 1px solid #e5e7eb !important;
+    background: #111827 !important;
+    color: #ffffff !important;
+    border: none !important;
   }
 
   .toolbar-right {
     margin-left: auto;
     font-size: 12px;
-    color: #b5b8bc;
+    color: #9ca3af;
   }
 
-  /* 输入框：巨大圆角 + 深阴影 */
+  /* 输入框：巨大圆角 + 深阴影*/
   .input-wrapper {
     background: #ffffff;
     border: 1px solid #e5e7eb;
@@ -434,7 +518,7 @@
   }
   .input-wrapper textarea::placeholder { color: #9ca3af; }
 
-  /* 发送按钮：绿色深圆 */
+  /* 发送按钮：绿色深圆角方形 */
   .send-btn {
     background: #16a34a !important;
     border: none !important;
@@ -454,11 +538,11 @@
   .input-tips {
     text-align: center;
     font-size: 11.5px;
-    color: #b5b8bc;
+    color: #9ca3af;
     margin-top: 9px;
   }
 
-  /* ============ 知识库抽屉（极简风）============ */
+  /* ============ 知识库抽屉 ============ */
   :deep(.el-drawer) { border-radius: 0; }
   .drawer-body { padding: 6px 4px; }
 
@@ -481,7 +565,6 @@
   .section-head .title { font-weight: 600; color: #111827; font-size: 14px; }
   .section-head .count { font-size: 12px; color: #9ca3af; }
 
-  /* 文件卡片（极简） */
   .file-card {
     display: flex; align-items: center; gap: 12px;
     padding: 10px 12px;
@@ -544,11 +627,14 @@
 <body>
 <div id="app">
   <div class="app-shell">
-    <!-- ============ 左侧边栏 ============ -->
+    <!-- ============ 左侧边栏============ -->
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-icon">🌱</div>
-        <span>MyRag AI</span>
+      <div class="brand-row">
+        <div class="brand">
+          <div class="brand-icon">🌱</div>
+          <span>MyRag AI</span>
+        </div>
+        <span class="brand-back" title="收起侧边栏">‹</span>
       </div>
 
       <el-button class="new-chat-btn" @click="newConversation">
@@ -565,6 +651,7 @@
           :class="{ active: conv.session_id === activeSessionId }"
           @click="switchConversation(conv.session_id)"
         >
+          <span class="conv-diamond">⋄</span>
           <span class="conv-title">{{ conv.title }}</span>
           <el-icon class="del-btn" size="13" @click.stop="confirmDeleteConversation(conv)">
             <Delete />
@@ -573,13 +660,8 @@
       </div>
 
       <div class="sidebar-footer">
-        <div class="nav-item" @click="showKnowledgeDrawer = true">
-          <el-icon size="14"><Collection /></el-icon>
-          <span>知识库</span>
-          <span class="badge" v-if="indexedFiles.length">{{ indexedFiles.length }}</span>
-        </div>
+        <div class="sidebar-tip">当前会话暂存于内存</div>
       </div>
-      <div class="sidebar-tip">当前会话已持久化</div>
     </aside>
 
     <!-- ============ 主区 ============ -->
@@ -593,17 +675,17 @@
           </span>
         </div>
         <div class="topbar-right" @click="showKnowledgeDrawer = true">
-          📚 知识库
+          知识库
         </div>
       </div>
 
       <!-- 欢迎页 / 消息 -->
       <template v-if="messages.length === 0">
         <div class="welcome">
-          <div class="welcome-icon">�</div>
-          <h1>你好，我是MyRag AI</h1>
-          <p class="sub">可以和我聊技术、代码与产品想法。</p>
-          <p class="sub">今天想一起解决什么问题？</p>
+          <div class="welcome-icon">🌱</div>
+          <h1>你好呀，我是 MyRag AI 的小助手</h1>
+          <p class="sub">负责在这里陪伴你，解答你的问题，帮助你更好地探索技术世界。😊</p>
+          <p class="sub">有什么可以帮助你的吗？✨</p>
         </div>
       </template>
 
@@ -621,17 +703,48 @@
                 <span v-else>U</span>
               </div>
               <div class="msg-content">
-                <div v-if="m.role === 'ai' && m.thinking" class="thinking">
-                  <span>思考中</span>
-                  <span class="thinking-dot"></span>
-                  <span class="thinking-dot"></span>
-                  <span class="thinking-dot"></span>
-                </div>
-                <div
-                  v-else-if="m.role === 'ai'"
-                  class="msg-bubble markdown-body"
-                  v-html="renderMarkdown(m.content)"
-                ></div>
+                <!-- AI 消息：思考过程 + 回答 -->
+                <template v-if="m.role === 'ai'">
+                  <!-- 思考中 loading 状态 -->
+                  <div v-if="m.thinking && !m.thinking_text" class="thinking-loading">
+                    <span>思考中</span>
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                  </div>
+
+                  <!-- 可折叠思考过程块 -->
+                  <div
+                    v-if="m.thinking_text && m.thinking_text.trim()"
+                    class="thinking-block"
+                    :class="{ open: m._thinkingOpen }"
+                  >
+                    <div class="thinking-header" @click="toggleThinking(m)">
+                      <div class="thinking-header-left">
+                        <span class="thinking-sparkle">✦</span>
+                        <span>深度思考</span>
+                        <span style="color:#d1d5db; font-weight:400;">
+                          · {{ formatThinkingTime(m) }}
+                        </span>
+                      </div>
+                      <div class="thinking-toggle">
+                        <span>{{ m._thinkingOpen ? '收起' : '展开' }}</span>
+                        <span class="chev">▾</span>
+                      </div>
+                    </div>
+                    <div class="thinking-body">
+                      <div class="thinking-content">{{ m.thinking_text }}</div>
+                    </div>
+                  </div>
+
+                  <!-- 回答内容 -->
+                  <div
+                    v-if="m.content || (!m.thinking && !m.thinking_text)"
+                    class="msg-bubble markdown-body"
+                    v-html="renderMarkdown(m.content)"
+                  ></div>
+                </template>
+                <!-- 用户消息 -->
                 <div v-else class="msg-bubble">{{ m.content }}</div>
               </div>
             </div>
@@ -647,16 +760,18 @@
         </div>
       </template>
 
-      <!-- 底部输入区 -->
+      <!-- 底部输入区-->
       <div class="input-area">
         <div class="input-inner">
           <div class="input-toolbar">
-            <!-- 模型：只有 glm-4.5-flash，固定展示，不再下拉 -->
-            <span class="model-tag">
+            <!-- 模型选择（✦ + 绿点 + 下拉）-->
+            <div class="model-select" @click.stop>
+              <span class="sparkle">✦</span>
               <span class="dot"></span>
               <span class="model-name">GLM-4-Flash</span>
               <span class="model-sub">(智谱·快速)</span>
-            </span>
+              <span class="chev">▾</span>
+            </div>
             <el-button
               class="deep-think-btn"
               :class="{ on: enableDeepThink }"
@@ -665,7 +780,7 @@
             >
               <span style="margin-right:3px;">✦</span>深度思考
             </el-button>
-            <span class="toolbar-right">My RAG · 知识库模式</span>
+            <span class="toolbar-right">1 个模型可用</span>
           </div>
 
           <div class="input-wrapper">
@@ -762,7 +877,7 @@
 </div>
 
 <script>
-const { createApp, ref, computed, nextTick, onMounted } = Vue;
+const { createApp, ref, computed, nextTick, onMounted, reactive } = Vue;
 
 const md = window.markdownit({
   html: false, breaks: true, linkify: true, typographer: true,
@@ -795,18 +910,40 @@ const app = createApp({
     // ========== 工具 ==========
     function scrollToBottom() {
       nextTick(() => {
-        if (msgListRef.value) msgListRef.value.scrollTop = msgListRef.value.scrollHeight;
+        const el = msgListRef.value;
+        if (!el) return;
+        // 只在用户已接近底部时才自动滚动，避免用户查看历史时被强制拉回
+        const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (dist < 120) el.scrollTop = el.scrollHeight;
       });
     }
     function autoResize() {
       const el = textareaRef.value;
       if (!el) return;
-      el.style.height = 'auto';
-      el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+      // 用 scrollHeight 直接比较，避免先设 auto 造成的高度跳动
+      const target = Math.min(el.scrollHeight, 180);
+      if (Math.abs(el.offsetHeight - target) > 1) {
+        el.style.height = target + 'px';
+      }
     }
     function renderMarkdown(text) {
       if (!text) return '';
       try { return md.render(text); } catch { return text; }
+    }
+
+    function toggleThinking(m) {
+      if (typeof m._thinkingOpen === 'undefined') {
+        m._thinkingOpen = true;
+      } else {
+        m._thinkingOpen = !m._thinkingOpen;
+      }
+    }
+    function formatThinkingTime(m) {
+      if (m._thinkingMs) {
+        const s = (m._thinkingMs / 1000).toFixed(1);
+        return s + ' 秒';
+      }
+      return '已思考';
     }
 
     function getFileIconClass(ext) {
@@ -842,12 +979,22 @@ const app = createApp({
     const LS_KEY_ACTIVE = 'myrag_active_session_id';
     const LS_KEY_MSGS_PREFIX = 'myrag_msgs_';
     function saveMessagesToCache(sid, msgs) {
-      try { localStorage.setItem(LS_KEY_MSGS_PREFIX + sid, JSON.stringify(msgs)); } catch {}
+      try { localStorage.setItem(LS_KEY_MSGS_PREFIX + sid, JSON.stringify(msgs.map(m => ({
+        role: m.role, content: m.content, thinking_text: m.thinking_text || '',
+        _thinkingOpen: m._thinkingOpen, _thinkingMs: m._thinkingMs,
+      })))); } catch {}
     }
     function loadMessagesFromCache(sid) {
       try {
         const raw = localStorage.getItem(LS_KEY_MSGS_PREFIX + sid);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+        const arr = JSON.parse(raw);
+        return arr.map(m => reactive({
+          role: m.role, content: m.content || '',
+          thinking: false, thinking_text: m.thinking_text || '',
+          _thinkingOpen: m._thinkingOpen !== undefined ? m._thinkingOpen : false,
+          _thinkingMs: m._thinkingMs || 0,
+        }));
       } catch { return null; }
     }
     function saveActiveSessionId(id) {
@@ -883,10 +1030,29 @@ const app = createApp({
         const resp = await fetch(`${API_BASE}/api/conversations/${sid}/messages`);
         if (resp.ok) {
           const serverMsgs = await resp.json();
-          messages.value = serverMsgs.map(m => ({ role: m.role, content: m.content }));
-          saveMessagesToCache(sid, messages.value);
+          if (serverMsgs && serverMsgs.length) {
+            const merged = [];
+            for (let i = 0; i < serverMsgs.length; i++) {
+              const sm = serverMsgs[i];
+              const cachedMsg = messages.value[i];
+              // 后端 role=assistant → 前端 role=ai
+              const role = sm.role === 'assistant' ? 'ai' : sm.role;
+              merged.push(reactive({
+                role: role,
+                content: sm.content || '',
+                thinking: false,
+                thinking_text: (cachedMsg && cachedMsg.thinking_text) || '',
+                _thinkingOpen: (cachedMsg && cachedMsg._thinkingOpen) || false,
+                _thinkingMs: (cachedMsg && cachedMsg._thinkingMs) || 0,
+              }));
+            }
+            messages.value = merged;
+            saveMessagesToCache(sid, messages.value);
+          }
         }
-      } catch {}
+      } catch (e) {
+        console.error('加载历史消息失败:', e);
+      }
       scrollToBottom();
     }
 
@@ -924,7 +1090,7 @@ const app = createApp({
       return false;
     }
 
-    // ========== 发送（SSE 流式）==========
+    // ========== 发送（SSE 流式，含思考过程）==========
     function onKeydown(e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     }
@@ -939,14 +1105,25 @@ const app = createApp({
         conv.title = q.slice(0, 20) + (q.length > 20 ? '…' : '');
       }
 
-      messages.value.push({ role: 'user', content: q });
-      const aiMsg = { role: 'ai', content: '', thinking: true };
+      messages.value.push(reactive({ role: 'user', content: q }));
+      const aiMsg = reactive({
+        role: 'ai',
+        content: '',
+        thinking: true,            // loading 思考中
+        thinking_text: '',          // 思考过程文本
+        _thinkingOpen: enableDeepThink.value, // 深度思考模式下默认展开
+        _thinkingStartAt: Date.now(),
+        _thinkingMs: 0,
+      });
       messages.value.push(aiMsg);
       lastSources.value = [];
       inputText.value = '';
       isStreaming.value = true;
       saveMessagesToCache(activeSessionId.value, messages.value);
       scrollToBottom();
+
+      // 记录思考阶段是否结束
+      let thinkingFinished = false;
 
       try {
         const resp = await fetch(`${API_BASE}/api/chat/stream`, {
@@ -956,6 +1133,7 @@ const app = createApp({
             question: q,
             session_id: activeSessionId.value,
             stream: true,
+            enable_deep_think: enableDeepThink.value,
           }),
         });
 
@@ -984,13 +1162,37 @@ const app = createApp({
             try { data = JSON.parse(rawData); } catch { data = rawData; }
 
             if (event === 'source')  { lastSources.value = data || []; }
-            if (event === 'thinking'){ aiMsg.thinking = true; }
+
+            // 思考中 loading 提示
+            if (event === 'thinking') {
+              aiMsg.thinking = true;
+            }
+
+            // 思考过程 token 增量
+            if (event === 'thinking_token') {
+              aiMsg.thinking = false; // 有思考内容了，关闭 loading
+              aiMsg.thinking_text += data || '';
+              aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
+              saveMessagesToCache(activeSessionId.value, messages.value);
+              scrollToBottom();
+            }
+
+            // 思考结束事件 → 开始输出正式回答
+            if (event === 'thinking_done') {
+              thinkingFinished = true;
+              aiMsg.thinking = false;
+              aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
+              saveMessagesToCache(activeSessionId.value, messages.value);
+            }
+
+            // 回答 token 增量
             if (event === 'token') {
-              if (aiMsg.thinking) { aiMsg.thinking = false; aiMsg.content = ''; }
+              aiMsg.thinking = false;
               aiMsg.content += data || '';
               saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom();
             }
+
             if (event === 'done') {
               aiMsg.thinking = false;
               isStreaming.value = false;
@@ -1090,6 +1292,7 @@ const app = createApp({
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,
       getFileIconClass, getFileIconText, formatSize,
+      toggleThinking, formatThinkingTime,
     };
   }
 });

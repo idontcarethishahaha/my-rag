@@ -26,15 +26,17 @@ def ping():
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
-        answer, sources = rag_service.ask_rag(
+        answer, thinking_text, sources = rag_service.ask_rag(
             question=req.question,
             session_id=req.session_id,
             top_k=req.top_k,
+            enable_deep_think=req.enable_deep_think,
         )
         return ChatResponse(
             answer=answer,
             sources=sources,
             session_id=req.session_id,
+            usage={"thinking_chars": len(thinking_text or "")},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -46,11 +48,21 @@ def chat_stream(req: ChatRequest):
     """
     Server-Sent Events (SSE) 流式输出。
     前端用 EventSource 或 fetch + ReadableStream 消费。
+
+    事件（event 字段）：
+      - source         引用来源 chunks
+      - thinking       进入思考阶段（前端展示 loading 点点点）
+      - thinking_token 思考过程文本增量（可折叠块里的内容）
+      - thinking_done  思考阶段结束
+      - token          正式回答文本增量
+      - done           全部结束
+      - error          异常信息
     """
     generator = rag_service.ask_rag_stream(
         question=req.question,
         session_id=req.session_id,
         top_k=req.top_k,
+        enable_deep_think=req.enable_deep_think,
     )
 
     def sse_wrap():
