@@ -56,6 +56,7 @@ def ask_rag(
     session_id: str,
     top_k: int | None = None,
     enable_deep_think: bool = False,
+    model: str | None = None,
 ) -> tuple[str, str, list[DocumentChunk]]:
     """返回 (answer, thinking_text, chunks)"""
     memory = get_memory_manager()
@@ -77,7 +78,7 @@ def ask_rag(
     )
 
     # 4) LLM 生成（支持深度思考）
-    answer, thinking_text = chat(messages, enable_deep_think=enable_deep_think)
+    answer, thinking_text = chat(messages, enable_deep_think=enable_deep_think, model=model)
 
     # 5) 写回记忆（只写 answer；thinking 不入库，仅前端在当前会话内展示）
     memory.append(session_id, question, answer)
@@ -100,6 +101,7 @@ def ask_rag_stream(
     session_id: str,
     top_k: int | None = None,
     enable_deep_think: bool = False,
+    model: str | None = None,
 ) -> Generator[dict, None, None]:
     memory = get_memory_manager()
 
@@ -135,7 +137,7 @@ def ask_rag_stream(
         has_sent_any_token = False
         thinking_phase_finished = False
 
-        for ttype, token in chat_stream(messages, enable_deep_think=enable_deep_think):
+        for ttype, token in chat_stream(messages, enable_deep_think=enable_deep_think, model=model):
             if ttype == "thinking":
                 full_thinking.append(token)
                 yield {"event": "thinking_token", "data": token}

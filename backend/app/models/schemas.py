@@ -46,6 +46,16 @@ class ChatRequest(BaseModel):
     stream: bool = Field(default=True, description="是否流式返回")
     top_k: Optional[int] = Field(default=None, description="覆盖默认 Top-K")
     enable_deep_think: bool = Field(default=False, description="是否启用深度思考模式")
+    model: Optional[str] = Field(default=None, description="指定模型名（如 glm-4-flash、glm-4.5-flash），不传则用默认模型")
+
+
+class ChatModel(BaseModel):
+    """可用模型列表项"""
+    id: str = Field(description="模型 ID，用于请求体 model 字段")
+    name: str = Field(description="显示名称")
+    provider: str = Field(description="提供商")
+    default: bool = Field(default=False, description="是否默认模型")
+    supports_deep_think: bool = Field(default=False, description="是否支持深度思考（reasoning_content）")
 
 
 class ChatResponse(BaseModel):

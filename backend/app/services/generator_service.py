@@ -2,7 +2,7 @@
 LLM 生成服务（完全参考 tomatocat-agent 的 LLMProvider 实现）
 
 关键改动：
-1. 模型仅 glm-4.5-flash（用户明确要求）
+1. 支持多模型：glm-4-flash、glm-4.5-flash 等，默认 glm-4.5-flash
 2. 普通模式 → LangChain ChatOpenAI
 3. 深度思考模式 → 直接用 AsyncOpenAI + extra_body={"enable_thinking": True}
    （参考 tomatocat-agent LLMProvider，智谱通过 reasoning_content 返回思考）
@@ -24,7 +24,25 @@ logger = logging.getLogger(__name__)
 # 智谱等国内域名，绕过代理直连（与 tomatocat 保持一致）
 _DOMESTIC_HOSTS = {"open.bigmodel.cn", "api.minimax.chat", "dashscope.aliyuncs.com"}
 
-_llm_instance = None
+# 可用模型列表
+AVAILABLE_MODELS = [
+    {
+        "id": "glm-4.5-flash",
+        "name": "GLM-4.5-Flash",
+        "provider": "智谱",
+        "default": True,
+        "supports_deep_think": True,
+    },
+    {
+        "id": "glm-4-flash",
+        "name": "GLM-4-Flash",
+        "provider": "智谱",
+        "default": False,
+        "supports_deep_think": False,  # glm-4-flash 不支持深度思考
+    },
+]
+
+_llm_instances = {}  # {model_id: ChatOpenAI 实例}
 
 
 def _bypass_proxy(base_url: str) -> bool:
@@ -35,39 +53,59 @@ def _bypass_proxy(base_url: str) -> bool:
         return False
 
 
-def get_llm():
+def _resolve_model(model: str | None) -> str:
+    """解析模型 ID：传入则用传入的，否则用默认配置 MODEL_ID"""
+    if model:
+        return model
+    return MODEL_ID
+
+
+def get_llm(model: str | None = None):
     """普通模式：LangChain ChatOpenAI（不启用思考）"""
-    global _llm_instance
-    if _llm_instance is not None:
-        return _llm_instance
+    model_id = _resolve_model(model)
+    if model_id in _llm_instances:
+        return _llm_instances[model_id]
 
     from langchain_openai import ChatOpenAI
 
-    _llm_instance = ChatOpenAI(
-        model=MODEL_ID,
+    llm = ChatOpenAI(
+        model=model_id,
         api_key=API_KEY or "placeholder",
         base_url=BASE_URL,
         temperature=0.1,
         max_tokens=4096,
         streaming=True,
     )
-    logger.info(f"[llm] 普通模式初始化：{MODEL_ID} @ {BASE_URL}")
-    return _llm_instance
+    _llm_instances[model_id] = llm
+    logger.info(f"[llm] 普通模式初始化：{model_id} @ {BASE_URL}")
+    return llm
+
+
+def model_supports_deep_think(model: str | None) -> bool:
+    """判断某个模型是否支持深度思考"""
+    model_id = _resolve_model(model)
+    for m in AVAILABLE_MODELS:
+        if m["id"] == model_id:
+            return m.get("supports_deep_think", False)
+    return False
 
 
 # ==================================
 # 同步入口
 # ==================================
-def chat(messages: list[dict], enable_deep_think: bool = False) -> Tuple[str, str]:
+def chat(messages: list[dict], enable_deep_think: bool = False, model: str | None = None) -> Tuple[str, str]:
     """同步调用。返回 (answer, thinking_text)。"""
-    return asyncio.run(_chat_async(messages, enable_deep_think=enable_deep_think))
+    return asyncio.run(_chat_async(messages, enable_deep_think=enable_deep_think, model=model))
 
 
-async def _chat_async(messages: list[dict], enable_deep_think: bool = False) -> Tuple[str, str]:
-    if enable_deep_think:
-        return await _deep_think_non_stream(messages)
+async def _chat_async(messages: list[dict], enable_deep_think: bool = False, model: str | None = None) -> Tuple[str, str]:
+    model_id = _resolve_model(model)
+    # 只有模型支持深度思考时才走深度思考分支
+    use_deep_think = enable_deep_think and model_supports_deep_think(model_id)
+    if use_deep_think:
+        return await _deep_think_non_stream(messages, model=model_id)
 
-    llm = get_llm()
+    llm = get_llm(model_id)
     resp = llm.invoke(messages)
     return resp.content or "", ""
 
@@ -78,6 +116,7 @@ async def _chat_async(messages: list[dict], enable_deep_think: bool = False) -> 
 def chat_stream(
     messages: list[dict],
     enable_deep_think: bool = False,
+    model: str | None = None,
 ) -> Iterator[Tuple[str, str]]:
     """
     同步生成器（封装异步的流式调用）。
@@ -86,13 +125,15 @@ def chat_stream(
       - type='thinking'  思考过程增量
       - type='content'   回答增量
     """
+    model_id = _resolve_model(model)
+    use_deep_think = enable_deep_think and model_supports_deep_think(model_id)
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
         async_gen = (
-            _deep_think_stream(messages)
-            if enable_deep_think
-            else _normal_stream(messages)
+            _deep_think_stream(messages, model=model_id)
+            if use_deep_think
+            else _normal_stream(messages, model=model_id)
         )
         gen = _syncify(async_gen, loop)
         for item in gen:
@@ -137,8 +178,9 @@ def _syncify(async_gen, loop):
 # ==================================
 # 普通模式：LangChain 流式
 # ==================================
-async def _normal_stream(messages) -> Iterator[Tuple[str, str]]:
-    llm = get_llm()
+async def _normal_stream(messages, model: str | None = None) -> Iterator[Tuple[str, str]]:
+    model_id = _resolve_model(model)
+    llm = get_llm(model_id)
     # LangChain 的 astream 是异步生成器
     async for chunk in llm.astream(messages):
         token = getattr(chunk, "content", None)
@@ -150,12 +192,13 @@ async def _normal_stream(messages) -> Iterator[Tuple[str, str]]:
 # 深度思考：AsyncOpenAI + extra_body={"enable_thinking": True}
 #          （与 tomatocat-agent 完全一致的策略）
 # ==================================
-async def _deep_think_non_stream(messages) -> Tuple[str, str]:
+async def _deep_think_non_stream(messages, model: str | None = None) -> Tuple[str, str]:
     import openai
 
+    model_id = _resolve_model(model)
     client = _make_async_openai()
     resp = await client.chat.completions.create(
-        model=MODEL_ID,
+        model=model_id,
         messages=messages,
         temperature=0.1,
         max_tokens=4096,
@@ -170,16 +213,17 @@ async def _deep_think_non_stream(messages) -> Tuple[str, str]:
     return content, thinking
 
 
-async def _deep_think_stream(messages):
+async def _deep_think_stream(messages, model: str | None = None):
     """
     流式深度思考（参考 tomatocat LLMProvider._chat_streaming）。
     - chunk.delta.reasoning_content → thinking token
     - chunk.delta.content           → content token
     """
+    model_id = _resolve_model(model)
     client = _make_async_openai()
 
     stream = await client.chat.completions.create(
-        model=MODEL_ID,
+        model=model_id,
         messages=messages,
         stream=True,
         temperature=0.1,

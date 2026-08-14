@@ -486,6 +486,49 @@
     font-size: 10px;
     margin-left: 2px;
   }
+  .model-select-wrap { position: relative; }
+  .model-dropdown {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    min-width: 260px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    padding: 6px;
+    z-index: 9999;
+    animation: fadeInUp .15s ease-out;
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .model-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .15s;
+    font-size: 12px;
+  }
+  .model-item:hover { background: #f7f8f6; }
+  .model-item.active { background: #f0fdf4; }
+  .model-item .model-name { font-weight: 500; color: #111827; }
+  .model-item .model-sub { color: #9ca3af; }
+  .model-tag {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+  .model-tag.think {
+    background: #eef2ff;
+    color: #4f46e5;
+    margin-left: 4px;
+  }
 
   /* 深度思考按钮（黑底白字）*/
   .deep-think-btn {
@@ -804,22 +847,42 @@
         <div class="input-inner">
           <div class="input-toolbar">
             <!-- 模型选择（✦ + 绿点 + 下拉）-->
-            <div class="model-select" @click.stop>
-              <span class="sparkle">✦</span>
-              <span class="dot"></span>
-              <span class="model-name">GLM-4.5-Flash</span>
-              <span class="model-sub">(智谱)</span>
-              <span class="chev">▾</span>
+            <div class="model-select-wrap">
+              <div class="model-select" @click.stop="toggleModelDropdown">
+                <span class="sparkle">✦</span>
+                <span class="dot"></span>
+                <span class="model-name">{{ currentModel.name }}</span>
+                <span class="model-sub">({{ currentModel.provider }})</span>
+                <span class="chev">▾</span>
+              </div>
+              <!-- 下拉菜单 -->
+              <div v-if="showModelDropdown" class="model-dropdown" @click.stop>
+                <div
+                  v-for="m in availableModels"
+                  :key="m.id"
+                  class="model-item"
+                  :class="{ active: m.id === selectedModelId }"
+                  @click="selectModel(m)"
+                >
+                  <span class="sparkle">✦</span>
+                  <span class="dot" v-if="m.id === selectedModelId"></span>
+                  <span class="model-name">{{ m.name }}</span>
+                  <span class="model-sub">({{ m.provider }})</span>
+                  <span class="model-tag" v-if="m.default">默认</span>
+                  <span class="model-tag think" v-if="m.supports_deep_think">✦ 支持思考</span>
+                </div>
+              </div>
             </div>
             <button
               class="deep-think-btn"
               :class="{ on: enableDeepThink }"
               @click="enableDeepThink = !enableDeepThink"
-              :disabled="isStreaming"
+              :disabled="isStreaming || !currentModel.supports_deep_think"
+              :title="currentModel.supports_deep_think ? '' : '该模型不支持深度思考'"
             >
               <span style="margin-right:3px;">✦</span>深度思考
             </button>
-            <span class="toolbar-right">1 个模型可用</span>
+            <span class="toolbar-right">{{ availableModels.length }} 个模型可用</span>
           </div>
 
           <div class="input-wrapper">
@@ -943,6 +1006,59 @@ const app = createApp({
     watch(enableDeepThink, (val) => {
       localStorage.setItem('myrag_deep_think', val ? 'true' : 'false');
     });
+
+    // ========== 模型选择 ==========
+    const availableModels = ref([]);
+    const selectedModelId = ref(localStorage.getItem('myrag_selected_model') || 'glm-4.5-flash');
+    const showModelDropdown = ref(false);
+
+    const currentModel = computed(() => {
+      const m = availableModels.value.find(x => x.id === selectedModelId.value);
+      return m || (availableModels.value[0] || { id: 'glm-4.5-flash', name: 'GLM-4.5-Flash', provider: '智谱', default: true, supports_deep_think: true });
+    });
+
+    // 切换模型时，如果新模型不支持深度思考 & 当前开启了 → 自动关闭深度思考
+    watch(selectedModelId, (newId) => {
+      localStorage.setItem('myrag_selected_model', newId);
+      const m = availableModels.value.find(x => x.id === newId);
+      if (m && !m.supports_deep_think && enableDeepThink.value) {
+        enableDeepThink.value = false;
+      }
+    });
+
+    function toggleModelDropdown() {
+      if (isStreaming.value) return;
+      showModelDropdown.value = !showModelDropdown.value;
+    }
+    function selectModel(m) {
+      selectedModelId.value = m.id;
+      showModelDropdown.value = false;
+    }
+    // 点击其他地方关闭下拉
+    function onDocClick() {
+      showModelDropdown.value = false;
+    }
+
+    async function loadModels() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/models`);
+        if (resp.ok) {
+          availableModels.value = await resp.json();
+          // 如果当前选的模型不在列表里，切换到默认模型
+          const exists = availableModels.value.some(m => m.id === selectedModelId.value);
+          if (!exists) {
+            const def = availableModels.value.find(m => m.default) || availableModels.value[0];
+            if (def) selectedModelId.value = def.id;
+          }
+        }
+      } catch (e) {
+        // 后端没启的话，前端先填一个默认值兜底
+        availableModels.value = [
+          { id: 'glm-4.5-flash', name: 'GLM-4.5-Flash', provider: '智谱', default: true, supports_deep_think: true },
+          { id: 'glm-4-flash',   name: 'GLM-4-Flash',   provider: '智谱', default: false, supports_deep_think: false },
+        ];
+      }
+    }
 
     const showKnowledgeDrawer = ref(false);
     const indexedFiles = ref([]);
@@ -1215,6 +1331,7 @@ const app = createApp({
             session_id: activeSessionId.value,
             stream: true,
             enable_deep_think: enableDeepThink.value,
+            model: selectedModelId.value,
           }),
         });
 
@@ -1364,8 +1481,10 @@ const app = createApp({
 
     // ========== 启动 ==========
     onMounted(async () => {
+      await loadModels();
       await loadConversations();
       await loadIndexedFiles();
+      document.addEventListener('click', onDocClick);
     });
 
     return {
@@ -1380,6 +1499,9 @@ const app = createApp({
       customUpload, loadIndexedFiles, confirmDeleteFile,
       getFileIconClass, getFileIconText, formatSize,
       toggleThinking, formatThinkingTime,
+      // 模型选择
+      availableModels, selectedModelId, showModelDropdown,
+      currentModel, toggleModelDropdown, selectModel,
     };
   }
 });

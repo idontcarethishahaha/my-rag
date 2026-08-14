@@ -2,6 +2,7 @@
 对话 / RAG 问答路由
   POST   /api/chat              非流式回答（简单调试用）
   POST   /api/chat/stream       SSE 流式回答（推荐）
+  GET    /api/models            可用模型列表
   GET    /api/conversations     会话列表
   DELETE /api/conversations/{id}  清空单个会话
 """
@@ -10,8 +11,8 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..services import rag_service, memory_service
-from ..models.schemas import ChatRequest, ChatResponse, ConversationInfo, PongResponse, MessageItem
+from ..services import rag_service, memory_service, generator_service
+from ..models.schemas import ChatRequest, ChatResponse, ConversationInfo, PongResponse, MessageItem, ChatModel
 
 router = APIRouter(prefix="/api", tags=["对话 / RAG 问答"])
 
@@ -20,6 +21,12 @@ router = APIRouter(prefix="/api", tags=["对话 / RAG 问答"])
 @router.get("/ping", response_model=PongResponse)
 def ping():
     return PongResponse()
+
+
+# -------- 可用模型列表 --------
+@router.get("/models", response_model=list[ChatModel])
+def list_models():
+    return [ChatModel(**m) for m in generator_service.AVAILABLE_MODELS]
 
 
 # -------- 非流式（调试用）--------
@@ -31,6 +38,7 @@ def chat(req: ChatRequest):
             session_id=req.session_id,
             top_k=req.top_k,
             enable_deep_think=req.enable_deep_think,
+            model=req.model,
         )
         return ChatResponse(
             answer=answer,
@@ -63,6 +71,7 @@ def chat_stream(req: ChatRequest):
         session_id=req.session_id,
         top_k=req.top_k,
         enable_deep_think=req.enable_deep_think,
+        model=req.model,
     )
 
     def sse_wrap():
