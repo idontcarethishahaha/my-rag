@@ -223,6 +223,30 @@
     overflow-y: auto;
     padding: 24px 0 180px;
   }
+
+  /* 回到底部箭头 */
+  .scroll-bottom-btn {
+    position: absolute;
+    bottom: 200px;
+    right: 32px;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    color: #6b7280;
+    z-index: 100;
+    transition: background .15s, color .15s, box-shadow .15s;
+  }
+  .scroll-bottom-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.16);
+  }
+  .fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+  .fade-enter-from, .fade-leave-to { opacity: 0; }
   .msg-wrap {
     max-width: 760px;
     margin: 0 auto;
@@ -640,7 +664,7 @@
     <aside class="sidebar">
       <div class="brand-row">
         <div class="brand">
-          <div class="brand-icon">🌱</div>
+          <div class="brand-icon">🍅</div>
           <span>MyRag AI</span>
         </div>
         <span class="brand-back" title="收起侧边栏">‹</span>
@@ -688,89 +712,92 @@
         </div>
       </div>
 
-      <!-- 欢迎页 -->
-      <template v-if="messages.length === 0">
-        <div class="msg-list" ref="msgListRef">
-          <div class="welcome">
-            <div class="welcome-icon">🌱</div>
-            <h1>你好呀，我是 MyRag AI 的小助手</h1>
-            <p class="sub">负责在这里陪伴你，解答你的问题，帮助你更好地探索技术世界。😊</p>
-            <p class="sub">有什么可以帮助你的吗？✨</p>
-          </div>
+      <!-- 唯一滚动容器：欢迎页 + 消息列表 永远在同一个 msg-list 内，避免切换销毁导致 ref 失效 -->
+      <div class="msg-list" ref="msgListRef" @scroll="onScrollMsgList">
+        <!-- 欢迎页（messages 为空时显示）-->
+        <div v-if="messages.length === 0" class="welcome">
+          <div class="welcome-icon">🍅</div>
+          <h1>你好呀，我是小番茄 🍅</h1>
+          <p class="sub">MyRag AI 的小助手，有点傲娇但很靠谱喵~ (｡•ᴗ-｡)♡</p>
+          <p class="sub">有什么可以帮助你的吗？✨</p>
         </div>
-      </template>
 
-      <!-- 消息列表（知识库引用来源在 msg-list 外面，不要放进滚动区）-->
-      <template v-else>
-        <div class="msg-list" ref="msgListRef">
-          <div class="msg-wrap">
-            <div
-              v-for="(m, idx) in messages"
-              :key="m._uid || ('fallback_' + idx)"
-              class="msg-row"
-              :class="m.role"
-            >
-              <div class="avatar" :class="m.role">
-                <span v-if="m.role === 'ai'">🌱</span>
-                <span v-else>U</span>
-              </div>
-              <div class="msg-content">
-                <!-- AI 消息：思考过程 + 回答 -->
-                <template v-if="m.role === 'ai'">
-                  <!-- 思考中 loading 状态 -->
-                  <div v-if="m.thinking && !m.thinking_text" class="thinking-loading">
-                    <span>思考中</span>
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                    <span class="thinking-dot"></span>
-                  </div>
+        <!-- 消息列表（messages 非空时显示）-->
+        <div v-else class="msg-wrap">
+          <div
+            v-for="(m, idx) in messages"
+            :key="m._uid || ('fallback_' + idx)"
+            class="msg-row"
+            :class="m.role"
+          >
+            <div class="avatar" :class="m.role">
+              <span v-if="m.role === 'ai'">🍅</span>
+              <span v-else>U</span>
+            </div>
+            <div class="msg-content">
+              <!-- AI 消息：思考过程 + 回答 -->
+              <template v-if="m.role === 'ai'">
+                <!-- 思考中 loading 状态 -->
+                <div v-if="m.thinking && !m.thinking_text" class="thinking-loading">
+                  <span>思考中</span>
+                  <span class="thinking-dot"></span>
+                  <span class="thinking-dot"></span>
+                  <span class="thinking-dot"></span>
+                </div>
 
-                  <!-- 可折叠思考过程块 -->
-                  <div
-                    v-if="m.thinking_text && m.thinking_text.trim()"
-                    class="thinking-block"
-                    :class="{ open: m._thinkingOpen }"
-                  >
-                    <div class="thinking-header" @click="toggleThinking(m)">
-                      <div class="thinking-header-left">
-                        <span class="thinking-sparkle">✦</span>
-                        <span>深度思考</span>
-                        <span style="color:#d1d5db; font-weight:400;">
-                          · {{ formatThinkingTime(m) }}
-                        </span>
-                      </div>
-                      <div class="thinking-toggle">
-                        <span>{{ m._thinkingOpen ? '收起' : '展开' }}</span>
-                        <span class="chev">▾</span>
-                      </div>
+                <!-- 可折叠思考过程块 -->
+                <div
+                  v-if="m.thinking_text && m.thinking_text.trim()"
+                  class="thinking-block"
+                  :class="{ open: m._thinkingOpen }"
+                >
+                  <div class="thinking-header" @click="toggleThinking(m)">
+                    <div class="thinking-header-left">
+                      <span class="thinking-sparkle">✦</span>
+                      <span>深度思考</span>
+                      <span style="color:#d1d5db; font-weight:400;">
+                        · {{ formatThinkingTime(m) }}
+                      </span>
                     </div>
-                    <div class="thinking-body">
-                      <div class="thinking-content">{{ m.thinking_text }}</div>
+                    <div class="thinking-toggle">
+                      <span>{{ m._thinkingOpen ? '收起' : '展开' }}</span>
+                      <span class="chev">▾</span>
                     </div>
                   </div>
+                  <div class="thinking-body">
+                    <div class="thinking-content">{{ m.thinking_text }}</div>
+                  </div>
+                </div>
 
-                  <!-- 回答内容 -->
-                  <div
-                    v-if="m.content || (!m.thinking && !m.thinking_text)"
-                    class="msg-bubble markdown-body"
-                    v-html="renderMarkdown(m.content)"
-                  ></div>
-                </template>
-                <!-- 用户消息 -->
-                <div v-else class="msg-bubble">{{ m.content }}</div>
-              </div>
+                <!-- 回答内容 -->
+                <div
+                  v-if="m.content || (!m.thinking && !m.thinking_text)"
+                  class="msg-bubble markdown-body"
+                  v-html="renderMarkdown(m.content)"
+                ></div>
+              </template>
+              <!-- 用户消息 -->
+              <div v-else class="msg-bubble">{{ m.content }}</div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div v-if="lastSources.length" class="sources">
-          <div class="source-tag" v-for="(s,i) in lastSources" :key="i">
-            <el-icon size="11"><Document /></el-icon>
-            <span>{{ s.source_file }}</span>
-            <span class="score">{{ (s.score * 100).toFixed(0) }}%</span>
-          </div>
+      <!-- 来源标签（始终在 msg-list 外面，固定位置）-->
+      <div v-if="messages.length > 0 && lastSources.length" class="sources">
+        <div class="source-tag" v-for="(s,i) in lastSources" :key="i">
+          <el-icon size="11"><Document /></el-icon>
+          <span>{{ s.source_file }}</span>
+          <span class="score">{{ (s.score * 100).toFixed(0) }}%</span>
         </div>
-      </template>
+      </div>
+
+      <!-- 回到底部箭头 -->
+      <transition name="fade">
+        <div v-if="showScrollBottom" class="scroll-bottom-btn" @click="clickScrollBottom">
+          <span>↓</span>
+        </div>
+      </transition>
 
       <!-- 底部输入区-->
       <div class="input-area">
@@ -780,7 +807,7 @@
             <div class="model-select" @click.stop>
               <span class="sparkle">✦</span>
               <span class="dot"></span>
-              <span class="model-name">GLM-4-Flash</span>
+              <span class="model-name">GLM-4.5-Flash</span>
               <span class="model-sub">(智谱)</span>
               <span class="chev">▾</span>
             </div>
@@ -889,7 +916,7 @@
 </div>
 
 <script>
-const { createApp, ref, computed, nextTick, onMounted, reactive } = Vue;
+const { createApp, ref, computed, nextTick, onMounted, reactive, watch } = Vue;
 
 const md = window.markdownit({
   html: false, breaks: true, linkify: true, typographer: true,
@@ -910,7 +937,12 @@ const app = createApp({
     const inputText = ref('');
     const isStreaming = ref(false);
     const lastSources = ref([]);
-    const enableDeepThink = ref(false);   // 用户手动切换，**不会在会话结束 / 切换时自动重置**
+    // 从 localStorage 恢复深度思考状态
+    const enableDeepThink = ref(localStorage.getItem('myrag_deep_think') === 'true');
+    // 状态变化时保存到 localStorage
+    watch(enableDeepThink, (val) => {
+      localStorage.setItem('myrag_deep_think', val ? 'true' : 'false');
+    });
 
     const showKnowledgeDrawer = ref(false);
     const indexedFiles = ref([]);
@@ -918,6 +950,7 @@ const app = createApp({
 
     const msgListRef = ref(null);
     const textareaRef = ref(null);
+    const showScrollBottom = ref(false);   // 是否显示"回到底部"箭头
 
     const activeConversation = computed(() =>
       conversations.value.find(c => c.session_id === activeSessionId.value)
@@ -929,13 +962,36 @@ const app = createApp({
         const el = msgListRef.value;
         if (!el) return;
         if (force) {
-          el.scrollTop = el.scrollHeight;
+          // 多次尝试滚动，确保 DOM 渲染完成
+          const doScroll = () => {
+            const el2 = msgListRef.value;
+            if (el2) el2.scrollTop = el2.scrollHeight;
+          };
+          doScroll();
+          requestAnimationFrame(() => {
+            doScroll();
+            setTimeout(doScroll, 100);
+          });
           return;
         }
-        // 只在用户已接近底部时才自动滚动
+        // 非强制：只在用户接近底部时才跟滚
         const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (dist < 120) el.scrollTop = el.scrollHeight;
+        if (dist < 150) el.scrollTop = el.scrollHeight;
       });
+    }
+
+    // 滚动监听：控制"回到底部"箭头显示/隐藏
+    function onScrollMsgList() {
+      const el = msgListRef.value;
+      if (!el) return;
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      showScrollBottom.value = dist > 200;
+    }
+
+    // 点击"回到底部"箭头
+    function clickScrollBottom() {
+      scrollToBottom(true);
+      showScrollBottom.value = false;
     }
     function autoResize() {
       const el = textareaRef.value;
@@ -989,7 +1045,7 @@ const app = createApp({
       return '📄';
     }
     function formatSize(bytes) {
-      if (!bytes || bytes === 0) return '未知';
+      if (!bytes || bytes === 0) return '已上传';
       if (bytes < 1024) return bytes + ' B';
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -1000,8 +1056,8 @@ const app = createApp({
     const LS_KEY_MSGS_PREFIX = 'myrag_msgs_';
     function saveMessagesToCache(sid, msgs) {
       try { localStorage.setItem(LS_KEY_MSGS_PREFIX + sid, JSON.stringify(msgs.map(m => ({
-        role: m.role, content: m.content, thinking_text: m.thinking_text || '',
-        _thinkingOpen: m._thinkingOpen, _thinkingMs: m._thinkingMs,
+        _uid: m._uid, role: m.role, content: m.content, thinking_text: m.thinking_text || '',
+        _thinkingOpen: m._thinkingOpen, _thinkingMs: m._thinkingMs || 0,
       })))); } catch {}
     }
     function loadMessagesFromCache(sid) {
@@ -1010,6 +1066,7 @@ const app = createApp({
         if (!raw) return null;
         const arr = JSON.parse(raw);
         return arr.map(m => reactive({
+          _uid: m._uid || ('cached_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
           role: m.role, content: m.content || '',
           thinking: false, thinking_text: m.thinking_text || '',
           _thinkingOpen: m._thinkingOpen !== undefined ? m._thinkingOpen : false,
@@ -1057,7 +1114,10 @@ const app = createApp({
               const cachedMsg = messages.value[i];
               // 后端 role=assistant → 前端 role=ai
               const role = sm.role === 'assistant' ? 'ai' : sm.role;
+              // 保留缓存中的 _uid，没有则生成新的
+              const uid = (cachedMsg && cachedMsg._uid) || _nextMsgUid();
               merged.push(reactive({
+                _uid: uid,
                 role: role,
                 content: sm.content || '',
                 thinking: false,
@@ -1195,7 +1255,7 @@ const app = createApp({
               aiMsg.thinking_text += data || '';
               aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
               saveMessagesToCache(activeSessionId.value, messages.value);
-              scrollToBottom();
+              scrollToBottom(false);
             }
 
             // 思考结束事件 → 开始输出正式回答
@@ -1204,6 +1264,7 @@ const app = createApp({
               aiMsg.thinking = false;
               aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
               saveMessagesToCache(activeSessionId.value, messages.value);
+              scrollToBottom(false);
             }
 
             // 回答 token 增量
@@ -1211,7 +1272,7 @@ const app = createApp({
               aiMsg.thinking = false;
               aiMsg.content += data || '';
               saveMessagesToCache(activeSessionId.value, messages.value);
-              scrollToBottom();
+              scrollToBottom(false);
             }
 
             if (event === 'done') {
@@ -1313,6 +1374,7 @@ const app = createApp({
       isStreaming, lastSources, enableDeepThink,
       showKnowledgeDrawer, indexedFiles, loadingFiles,
       msgListRef, textareaRef, activeConversation,
+      showScrollBottom, onScrollMsgList, clickScrollBottom,
       newConversation, switchConversation, confirmDeleteConversation,
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,

@@ -43,5 +43,9 @@ def get_file_status(file_id: str):
 
 @router.delete("/{file_id}")
 def delete_file_index(file_id: str):
-    indexer_service.delete_file_index(file_id)
-    return {"status": "ok", "message": "已删除索引"}
+    try:
+        indexer_service.delete_file_index(file_id)
+        return {"status": "ok", "message": "已删除索引"}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除失败: {e}")

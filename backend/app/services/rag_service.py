@@ -18,6 +18,7 @@ from ..utils.prompt_templates import build_rag_messages
 from .retriever_service import retrieve
 from .generator_service import chat, chat_stream
 from .memory_service import get_memory_manager
+from .indexer_service import get_file_list
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +67,13 @@ def ask_rag(
     history_raw = memory.get_messages(session_id, last_n=6)
     history = _messages_to_dicts(history_raw)
 
-    # 3) 组装 Prompt
+    # 3) 组装 Prompt（注入真实文件列表）
+    file_list = get_file_list()
     messages = build_rag_messages(
         query=question,
         chunks=_chunks_to_dicts(chunks),
         conversation_history=history,
+        file_list=file_list,
     )
 
     # 4) LLM 生成（支持深度思考）
@@ -112,11 +115,13 @@ def ask_rag_stream(
         history_raw = memory.get_messages(session_id, last_n=6)
         history = _messages_to_dicts(history_raw)
 
-        # ---- 3) 组装 Prompt ----
+        # ---- 3) 组装 Prompt（注入真实文件列表）----
+        file_list = get_file_list()
         messages = build_rag_messages(
             query=question,
             chunks=_chunks_to_dicts(chunks),
             conversation_history=history,
+            file_list=file_list,
         )
 
         # ---- 4) 流式生成（思考 + 回答分阶段推送）----

@@ -1,221 +1,234 @@
 # MyRag AI 修改记录 (diff.md)
 
-生成时间：2026-08-14
+生成时间：2026-08-14（第二轮修改）
 
 ---
 
-## 一、修改总览
+## 一、本轮修改总览
 
-本轮针对 **D:\ai学习项目\my-rag** 做了两个核心改造：
+本轮修复了用户反馈的两个核心问题 + 若干 UI 稳定性问题：
 
-| # | 需求 | 涉及文件 |
+| # | 问题 | 涉及文件 |
 |---|------|----------|
-| 1 | 思考过程可折叠展示 | `frontend/index.html` |
-| 2 | 思考过程真正可见（之前是假的/拿不到），**完全参考 tomatocat-agent 中 LLMProvider 的做法** | `backend/app/services/generator_service.py`、`backend/app/services/rag_service.py`、`backend/app/routers/chat_router.py`、`backend/app/models/schemas.py` |
-| 3 | 修复"只能根据知识库回答"的问题，改成 **知识库优先 + LLM 自身知识兜底** | `backend/app/utils/prompt_templates.py` |
+| 1 | 回答结束后页面跳回顶部 + 深度思考按钮自动关闭 | `frontend/index.html` |
+| 2 | 文档已入库但检索不到（阈值过高导致过滤） | `backend/app/store/vector_store.py`、`backend/app/services/retriever_service.py` |
+| 3 | 页面抖动（transition:all + autoResize + scrollToBottom 频繁触发） | `frontend/index.html` |
+| 4 | 历史对话看不到（后端 role=assistant vs 前端 role=ai 不匹配） | `frontend/index.html` |
+| 5 | Event loop is closed 错误（_syncify finally 中 task.cancel） | `backend/app/services/generator_service.py` |
 
 ---
 
 ## 二、各文件详细修改
 
-### 2.1 前端：`frontend/index.html`（整体替换）
+### 2.1 `frontend/index.html`
 
-#### 2.1.1 整体视觉
+#### 2.1.1 深度思考按钮：el-button → 原生 button
+
+**根因**：Element Plus `el-button` 在 `:disabled` 状态切换（`isStreaming` 变化）时内部重渲染，导致 `:class="{ on: enableDeepThink }"` 绑定的 `.on` 样式丢失，视觉上看起来"按钮自动关闭"。
 
 ```diff
-- 左侧边栏：浅灰绿 #f7f8f6 背景
-- 品牌区：🌱 brand-icon + "MyRag AI" + 左侧 "‹" 返回图标
-- 新对话按钮：白底圆角 + "+" 绿色加号，按钮内文字左对齐
-- 会话列表：激活项 "⋄" 菱形图标 + 浅灰底 (#e8e9e8)，hover 时显示删除小叉
-- 底栏提示："当前会话暂存于内存"
+- <el-button
+-   class="deep-think-btn"
+-   :class="{ on: enableDeepThink }"
+-   @click="enableDeepThink = !enableDeepThink"
+-   size="small"
+- >
+-   <span style="margin-right:3px;">✦</span>深度思考
+- </el-button>
 
-- 顶栏：极简设计
-  - 左侧：‹ 返回图标 + 加粗会话标题
-  - 右侧："回到博客" 文字（点击打开知识库抽屉）
-
-- 欢迎页：
-  - 🌱 大图标 + "你好呀，我是 MyRag AI 的小助手"
-  - 副标题："负责在这里陪伴你，解答你的问题，帮助你更好地探索技术世界。😊 有什么可以帮助你的吗？✨"
-  - 底部 radial-gradient 绿色柔光背景
-
-- 输入工具栏：
-  - 模型选择器：✦ 钻石符 + 绿点 + "GLM-4-Flash (智谱·快速) ▾"
-  - 深度思考按钮：黑底白字 "✦深度思考"（按下后白底黑字 on 态）
-  - 右侧："1 个模型可用"
-
-- 输入框：
-  - 超大圆角 (22px) + 深阴影
-  - placeholder："给 MyRag AI 发送消息"
-  - 发送按钮：绿色方形 #16a34a，内含 ↑ 图标，hover 时轻微上移
-  - 底部提示："内容由 AI 生成，请注意甄别 · Enter 发送，Shift + Enter 换行"
++ <button
++   class="deep-think-btn"
++   :class="{ on: enableDeepThink }"
++   @click="enableDeepThink = !enableDeepThink"
++   :disabled="isStreaming"
++ >
++   <span style="margin-right:3px;">✦</span>深度思考
++ </button>
 ```
 
-#### 2.1.2 思考过程折叠块（核心新增 UI）
+CSS 也同步调整，新增 `:disabled` 灰化样式，`transition` 从 `all` 改为只过渡 `background/color/border-color`。
+
+#### 2.1.2 消息 key 稳定化（防止 Vue 重建 DOM 导致滚动跳动）
+
+**根因**：`v-for :key="idx"` 用数组序号当 key，每次 token 增量都可能触发 Vue 重新渲染整个列表，导致 `scrollTop` 丢失。
 
 ```diff
-+ 在每条 AI 回答的上方嵌入思考过程折叠卡片：
-+   .thinking-block → 卡片容器（默认收起，.open 展开）
-+     .thinking-header → 点击区
-+       左：✦ 深度思考 · 3.2 秒（✦ 黄色钻石 + 思考耗时统计）
-+       右：展开 ▾ / 收起 ▾（旋转动画）
-+     .thinking-body → 可折叠主体，CSS max-height 过渡动画
-+       .thinking-content → 灰色小字 pre-wrap 保留换行（灰色 #6b7280）
+- v-for="(m, idx) in messages" :key="idx"
+
++ // setup() 中新增全局自增 uid 生成器
++ let _msgUidCounter = 0;
++ const _nextMsgUid = () => ('m_' + (++_msgUidCounter) + '_' + Date.now().toString(36));
 +
-+ 思考中 loading 状态（三点跳动）：
-+   "思考中 · · ·"（CSS @keyframes bounce）
++ // 每条消息创建时分配稳定 _uid
++ messages.value.push(reactive({ _uid: _nextMsgUid(), role: 'user', content: q }));
++ const aiMsg = reactive({ _uid: _nextMsgUid(), role: 'ai', ... });
 +
-+ 逻辑：
-+   - 深度思考模式下默认展开折叠块
-+   - 点击可切换收起/展开
-+   - 思考内容存储在 messages[i].thinking_text，仅存于 localStorage（不入库）
++ // v-for key 改为稳定 uid
++ v-for="(m, idx) in messages" :key="m._uid || ('fallback_' + idx)"
 ```
 
-#### 2.1.3 SSE 事件消费（新增 thinking 相关事件）
+#### 2.1.3 scrollToBottom 增加 force 参数
 
-```javascript
-// 在 fetch ReadableStream 的解析循环中，新增以下事件处理：
-if (event === 'thinking')        // → 显示"思考中…"三点 loading
-if (event === 'thinking_token')  // → m.thinking_text += token，累加到折叠块
-if (event === 'thinking_done')   // → 标记思考阶段结束，准备正式回答
-```
-
-
----
-
-### 2.2 后端：`backend/app/services/generator_service.py`（完全重写，参考 tomatocat-agent LLMProvider）
-
-#### 2.2.1 为什么之前看不到思考过程？
-
-**错误做法（第一次尝试）**：用 httpx 手写请求，传 `thinking: {"type": "enabled"}`
-→ 智谱不识别这个参数，永远不会返回 `reasoning_content`。
-
-**正确做法（tomatocat-agent 同款，本次重写）**：用 `AsyncOpenAI` + `extra_body={"enable_thinking": True}`
-
-```python
-# tomatocat-agent 原版写法：
-if self.enable_thinking:
-    kwargs["extra_body"] = {"enable_thinking": True}
-await client.chat.completions.create(**kwargs)
-
-# 思考过程解析（tomatocat 同款字段）：
-reasoning = getattr(delta, "reasoning_content", None)   # 思考 token
-content   = getattr(delta, "content", None)             # 回答 token
-```
-
-#### 2.2.2 新架构
+**根因**：`scrollToBottom` 的 `dist < 120` 判断在思考块展开 / 内容增长时不满足，导致不滚动。
 
 ```diff
-+ 普通模式 → LangChain ChatOpenAI（单例，不启用思考）
-+ 深度思考模式 → AsyncOpenAI 直接调用（绕过 LangChain）：
-+    传 extra_body={"enable_thinking": True}
-+    国内域名（open.bigmodel.cn）→ httpx.AsyncClient(proxy=None) 绕过代理
-+    流式：delta.reasoning_content 作为 ("thinking", token)
-+           delta.content           作为 ("content", token)
+- function scrollToBottom() {
+-   nextTick(() => {
+-     const el = msgListRef.value;
+-     if (!el) return;
+-     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+-     if (dist < 120) el.scrollTop = el.scrollHeight;
+-   });
+- }
+
++ function scrollToBottom(force = false) {
++   nextTick(() => {
++     const el = msgListRef.value;
++     if (!el) return;
++     if (force) {
++       el.scrollTop = el.scrollHeight;
++       return;
++     }
++     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
++     if (dist < 120) el.scrollTop = el.scrollHeight;
++   });
++ }
 ```
 
-#### 2.2.3 同步→异步桥接
+在 `done` 事件和兜底逻辑中调用 `scrollToBottom(true)` 强制滚动：
+```diff
++ if (event === 'done') {
++   ...
++   scrollToBottom(true);  // 流结束后强制滚到底部
++ }
+```
 
-由于 FastAPI 路由是同步的（rag_service 中 ask_rag_stream 是 Generator），新增 `_syncify()`：
-- 用 `asyncio.new_event_loop` + `Queue` 把异步生成器包装为同步生成器
-- 确保事件循环的正确关闭，避免多线程下的 asyncio 警告
+#### 2.1.4 done 事件增加 _finalized 标记
 
----
-
-### 2.3 后端：`backend/app/services/rag_service.py`（思考阶段事件拆解）
-
-在原有的 `source → token → done` 事件流基础上，增加思考阶段：
+防止 SSE `done` 之后兜底逻辑重复处理消息：
 
 ```diff
-  事件顺序：
-    source          引用来源 chunks
-+   thinking        进入思考阶段（触发前端"三点 loading"）
-+   thinking_token  思考过程文本增量（前端累加到可折叠块）
-+   thinking_done   首个 content token 到达前自动补发
-    token           正式回答文本增量
-    done            全部结束
-    error           异常
++ if (event === 'done') {
++   aiMsg._finalized = true;
++   ...
++ }
++ // 兜底逻辑检查标记
++ if (isStreaming.value && !aiMsg._finalized) { ... }
 ```
 
-**关键设计**：`thinking_done` 由 rag_service 在收到第一个 `'content'` type 时自动补发，避免前端判断"是否还在思考"出错。
+#### 2.1.5 历史消息 role 映射修复
 
----
-
-### 2.4 后端：`backend/app/routers/chat_router.py` 和 `schemas.py`
+**根因**：后端 `memory_service` 存储 role 为 `assistant`，前端模板判断 `m.role === 'ai'` 渲染 AI 消息，不匹配导致历史对话不显示。
 
 ```diff
-# schemas.py / ChatRequest：
-+ enable_deep_think: bool = Field(default=False, description="是否启用深度思考模式")
++ // 后端 role=assistant → 前端 role=ai
++ const role = sm.role === 'assistant' ? 'ai' : sm.role;
+```
 
-# chat_router.py：
-  chat() 和 chat_stream() 均新增透传 enable_deep_think 参数
-  SSE 注释更新为完整事件列表
+同时在 `switchConversation` 中为从 localStorage / 后端加载的旧消息补上 `_uid`。
+
+#### 2.1.6 autoResize 优化（减少抖动）
+
+```diff
+- function autoResize() {
+-   const el = textareaRef.value;
+-   if (!el) return;
+-   el.style.height = 'auto';           // ← 先设 auto 会瞬间收缩
+-   el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+- }
+
++ function autoResize() {
++   const el = textareaRef.value;
++   if (!el) return;
++   const target = Math.min(el.scrollHeight, 180);
++   if (Math.abs(el.offsetHeight - target) > 1) {
++     el.style.height = target + 'px';  // ← 直接比较，不设 auto
++   }
++ }
+```
+
+#### 2.1.7 deep-think-btn 按钮开关样式修正
+
+之前默认状态是黑底白字（看着像已激活），点击后变白底（像关闭）。修正为：
+- **未开启**（默认）：白底黑字 + 浅边框
+- **已开启**（`.on`）：黑底白字
+
+---
+
+### 2.2 `backend/app/store/vector_store.py`
+
+**根因**：`similarity_search_with_score` 默认 `score_threshold=0.3`，ChromaDB 返回的 L2 距离转换成 `1/(1+d)` 后，很多有效文档的相似度在 0.2~0.3 之间，被阈值过滤掉了。
+
+```diff
+  def similarity_search_with_score(
+      query: str,
+      k: int = 6,
+-     score_threshold: float = 0.3,
++     score_threshold: float = 0.0,   # 默认不过滤，最大化召回率
+      filter: Optional[dict] = None,
+  ) -> list[tuple[Document, float]]:
+-     """阈值默认 0.3：低于此值的结果被过滤；设为 0 则不过滤。"""
++     """阈值默认 0.0（不过滤，最大化召回率）。"""
 ```
 
 ---
 
-### 2.5 后端：`backend/app/utils/prompt_templates.py`（修复"只能根据知识库回答"）
+### 2.3 `backend/app/services/retriever_service.py`
 
-#### 之前的系统提示（严格限制）
+新增检索日志，方便调试"为什么检索不到"的问题：
 
-```
-1. 仅基于【参考资料】中的内容回答问题，不得编造、推测或补充参考资料中没有的信息
-3. 如果参考资料不足以完整回答问题，明确说明："根据现有知识库资料，暂无法完整回答此问题"
-```
+```diff
++ import logging
++ logger = logging.getLogger(__name__)
 
-#### 修改后的系统提示（知识库优先 + LLM 兜底）
-
-```
-1. 优先使用【参考资料】中的内容，引用资料关键论述标注来源
-3. 当参考资料不足或没有相关内容时，可以使用你自身的知识进行补充或正常回答，
-   只需在涉及事实性内容前注明"（以下内容来自通用知识）"
-6. 对闲聊、问候、个人类问题，可以像正常 AI 助手一样自然回复，不要强行关联知识库
-```
-
-**效果**：
-- 问知识库有的内容 → 优先用资料，标注来源
-- 问知识库没有但 LLM 知道的事实 → 标注"（以下内容来自通用知识）"回答
-- 闲聊「你好 / 你叫什么名字」→ 正常回复，不再说"根据现有知识库无法回答"
-
----
-
-## 三、数据流图
-
-```
-前端：✦深度思考按钮开启
-  ↓ POST /api/chat/stream
-    { question, session_id, enable_deep_think: true }
-  ↓
-chat_router.chat_stream()
-  ↓ 透传 enable_deep_think
-rag_service.ask_rag_stream()
-  ├── 1. retrieve() → SSE: source {chunks}
-  ├── 2. memory.get_messages(last_n=6) + build_rag_messages()
-  └── 3. generator_service.chat_stream(enable_deep_think=True)
-           ↓（AsyncOpenAI + extra_body={"enable_thinking": True}）
-           ├── yield ("thinking", token) → SSE: thinking_token 事件
-           └── yield ("content",  token) → SSE: token 事件（首个之前补发 thinking_done）
-  └── 4. memory.append(question, answer) → 思考内容不入库，仅存前端缓存
-    ↓
-前端 ReadableStream 解析
-  ├── thinking       → 显示思考中三点 loading
-  ├── thinking_token → m.thinking_text += token → 折叠块内容增长
-  ├── thinking_done  → 思考阶段结束
-  ├── token          → m.content += token → Markdown 正式回答
-  └── done           → isStreaming = false，写入 localStorage
+  def retrieve(...):
+      ...
+      docs_scores = similarity_search_with_score(query, k=recall_k, score_threshold=th)
++     logger.info(f"[retrieve] query='{query[:50]}', recall_k={recall_k}, threshold={th}, raw_hits={len(docs_scores)}")
+      ...
++     if chunks:
++         logger.info(f"[retrieve] 返回 {len(chunks)} 个块, top_score={chunks[0].score:.4f}, sources={[c.source_file for c in chunks]}")
+      return chunks
 ```
 
 ---
 
-## 四、验证清单
+### 2.4 `backend/app/services/generator_service.py`
 
-重启后端 & 刷新前端后验证：
+修复 `RuntimeError: Event loop is closed` 错误：
 
-| 验证项 | 操作 | 预期结果 |
-|--------|------|----------|
-| 品牌名 | 看页面 UI | 
-| 深度思考过程 | 开启 ✦深度思考 按钮，问一个推理题如"100 以内素数和是多少" | ① 出现"思考中·三点"→ ② 折叠块显示思考内容 → ③ 正式回答 |
-| 思考折叠 | 点击"深度思考"卡头 | 可折叠 / 展开，▾ 旋转动画 |
-| 闲聊 LLM 兜底 | 问"你好你叫什么" / "1+1 等于几" | 正常回答，不说"根据知识库无法回答" |
-| 知识库优先 | 问知识库中的问题 | 带 [来源: 文档名] 标注，引用资料内容 |
-| 知识库外事实 | 问知识库没有的通识（如"法国首都"） | 标注"（以下内容来自通用知识）"后正常回答 |
-| 引用来源显示 | 回答后消息下方 | 出现"📄 文件名 XX%" source-tag 标签 |
+**根因**：`_syncify` 的 `main()` 异步生成器在 `finally` 块中调用 `task.cancel()` + `await task`，但此时事件循环已经被 `loop.close()` 关闭。
+
+```diff
+  async def main():
+      task = asyncio.create_task(_drain())
+      try:
+          while True:
+              ...
+      finally:
+-         task.cancel()
+-         try:
+-             await task
+-         except (asyncio.CancelledError, Exception):
+-             pass
++         # 不再 cancel：_drain 正常通过 q.put(("done", None)) 结束
++         # 循环关闭后 cancel 会报 RuntimeError: Event loop is closed
++         pass
+```
+
+---
+
+## 三、验证清单
+
+重启后端（`uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`）+ 刷新前端后验证：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 深度思考按钮保持 | 开启深度思考 → 发送问题 → 等待回答完成 | 按钮保持黑底白字 on 态，不自动关闭 |
+| 2 | 滚动到底部 | 发送问题 → 等待回答完成 | 页面自动滚到最底部，不跳回顶部 |
+| 3 | 页面不抖动 | 流式回答过程中观察页面 | 无明显抖动/跳动 |
+| 4 | 历史对话可见 | 切换到之前的会话 | 历史消息正常显示（AI 消息有头像和气泡） |
+| 5 | 文档检索正常 | 上传文档 → 问文档中的内容 | 后端日志显示 `raw_hits > 0`，AI 回答引用资料 |
+| 6 | Event loop 错误 | 后端控制台 | 不再出现 `RuntimeError: Event loop is closed` |
+| 7 | 闲聊兜底 | 问"你好你叫什么" | 正常回复，不说"根据知识库无法回答" |
+| 8 | 思考过程折叠 | 开启深度思考 → 问推理题 | 出现可折叠的思考块，点击可展开/收起 |

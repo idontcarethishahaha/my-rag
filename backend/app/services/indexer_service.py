@@ -9,6 +9,7 @@
   get_file_status(file_id)          → 查询状态
 """
 from __future__ import annotations
+import logging
 import os
 import re
 import uuid
@@ -18,6 +19,8 @@ from ..config import UPLOAD_DIR, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, VECTOR_DB_TY
 from ..loaders.document_loader import load_document, SUPPORTED_EXTS, get_ext
 from ..splitters.text_splitter import split_documents
 from ..store.vector_store import get_vector_store, delete_by_file
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,25 +47,61 @@ _FILE_ID_PATTERN = re.compile(r"^([0-9a-f]{12})_(.+)$")
 
 
 def _restore_from_disk() -> None:
-    """从 uploads 目录扫描已上传的文件，恢复到内存列表"""
+    """从 uploads 目录扫描已上传的文件，恢复到内存列表，清理孤立 chunk"""
     if not os.path.isdir(UPLOAD_DIR):
         return
+    vs = get_vector_store()
+    # 取向量库中所有 chunk 的 metadata
+    all_data = vs.get() if vs else {}
+    chunk_counts: dict[str, int] = {}
+    all_vdb_file_ids: set[str] = set()
+    for meta in all_data.get("metadatas", []) or []:
+        fid = meta.get("file_id")
+        if fid:
+            chunk_counts[fid] = chunk_counts.get(fid, 0) + 1
+            all_vdb_file_ids.add(fid)
+
+    # 磁盘上存在的 file_id 集合
+    disk_file_ids: set[str] = set()
     for fn in os.listdir(UPLOAD_DIR):
         m = _FILE_ID_PATTERN.match(fn)
         if not m:
             continue
         file_id = m.group(1)
+        disk_file_ids.add(file_id)
         original_name = m.group(2)
         if file_id not in _progress_store:
             file_path = os.path.join(UPLOAD_DIR, fn)
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            actual_chunks = chunk_counts.get(file_id, 0)
             _progress_store[file_id] = IndexProgress(
                 file_name=original_name,
                 status="done",
                 progress=1.0,
                 file_size=file_size,
                 file_ext=os.path.splitext(original_name)[1].lower(),
+                chunks_count=actual_chunks,
             )
+
+    # 清理孤立 chunk：向量库中有，但磁盘上文件已不存在
+    orphan_ids = all_vdb_file_ids - disk_file_ids
+    for fid in orphan_ids:
+        delete_by_file(fid)
+        logger.info(f"[restore] 清理孤立 chunk: file_id={fid}")
+
+
+def get_file_list() -> list[dict]:
+    """获取当前所有文件的真实列表（含 chunk 数），供 AI 回答时参考"""
+    result = []
+    for fid, p in _progress_store.items():
+        if p.status == "done":
+            result.append({
+                "file_id": fid,
+                "file_name": p.file_name,
+                "chunks_count": p.chunks_count,
+                "file_size": p.file_size,
+            })
+    return result
 
 
 # 模块加载时自动恢复
@@ -155,16 +194,23 @@ def index_uploaded_file(file_bytes: bytes, filename: str) -> dict:
 
 
 def delete_file_index(file_id: str) -> None:
-    """删除一个文件的所有索引块"""
-    delete_by_file(file_id)
+    """删除一个文件的所有索引块（向量库 + 磁盘 + 内存）"""
+    # 1. 删除向量库中的 chunk
+    deleted_count = delete_by_file(file_id)
+    logger.info(f"[delete] file_id={file_id}: 从向量库删除了 {deleted_count} 个 chunk")
+    
+    # 2. 从内存中移除
     _progress_store.pop(file_id, None)
-    # 顺便清理磁盘上传文件
-    for fn in os.listdir(UPLOAD_DIR):
-        if fn.startswith(f"{file_id}_"):
-            try:
-                os.remove(os.path.join(UPLOAD_DIR, fn))
-            except Exception:
-                pass
+    
+    # 3. 清理磁盘上传文件
+    if os.path.isdir(UPLOAD_DIR):
+        for fn in os.listdir(UPLOAD_DIR):
+            if fn.startswith(f"{file_id}_"):
+                try:
+                    os.remove(os.path.join(UPLOAD_DIR, fn))
+                    logger.info(f"[delete] file_id={file_id}: 删除磁盘文件 {fn}")
+                except Exception as e:
+                    logger.warning(f"[delete] file_id={file_id}: 删除磁盘文件失败 {fn}: {e}")
 
 
 def get_status(file_id: str) -> dict | None:

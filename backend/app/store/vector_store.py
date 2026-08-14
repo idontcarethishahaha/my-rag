@@ -100,10 +100,18 @@ def similarity_search_with_score(
     return normalized
 
 
-def delete_by_file(file_id: str) -> None:
-    """按 file_id 批量删除一个文件的所有块"""
+def delete_by_file(file_id: str) -> int:
+    """按 file_id 批量删除一个文件的所有块，返回删除的数量"""
     store = get_vector_store()
     try:
-        store.delete(where={"file_id": file_id})
-    except Exception:
-        pass
+        result = store.get(where={"file_id": file_id})
+        ids_to_delete = result.get("ids", [])
+        if not ids_to_delete:
+            return 0
+        store.delete(ids=ids_to_delete)
+        return len(ids_to_delete)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[vector_store] 删除文件失败 file_id={file_id}: {e}")
+        raise
