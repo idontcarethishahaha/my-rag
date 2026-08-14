@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DongBlog AI</title>
+<title>MyRag AI</title>
 
 <script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/element-plus@2.8.4/dist/index.css" />
@@ -179,7 +179,7 @@
   }
   .topbar-right:hover { color: #22c55e; }
 
-  /* ============ 欢迎页（DongBlog 风格居中）============ */
+  /* ============ 欢迎页============ */
   .welcome {
     flex: 1;
     display: flex;
@@ -347,7 +347,7 @@
   }
   .source-tag .score { color: #16a34a; font-weight: 500; }
 
-  /* ============ 底部输入区（DongBlog 风格：两行工具栏+输入框大阴影）============ */
+  /* ============ 底部输入区============ */
   .input-area {
     position: absolute;
     left: 0; right: 0; bottom: 0;
@@ -548,7 +548,7 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-icon">🌱</div>
-        <span>DongBlog AI</span>
+        <span>MyRag AI</span>
       </div>
 
       <el-button class="new-chat-btn" @click="newConversation">
@@ -601,7 +601,7 @@
       <template v-if="messages.length === 0">
         <div class="welcome">
           <div class="welcome-icon">�</div>
-          <h1>你好，我是 DongBlog AI</h1>
+          <h1>你好，我是MyRag AI</h1>
           <p class="sub">可以和我聊技术、代码与产品想法。</p>
           <p class="sub">今天想一起解决什么问题？</p>
         </div>
@@ -647,7 +647,7 @@
         </div>
       </template>
 
-      <!-- 底部输入区（DongBlog 两行结构） -->
+      <!-- 底部输入区 -->
       <div class="input-area">
         <div class="input-inner">
           <div class="input-toolbar">
@@ -671,7 +671,7 @@
           <div class="input-wrapper">
             <textarea
               v-model="inputText"
-              placeholder="给 DongBlog AI 发送消息"
+              placeholder="给 MyRag AI 发送消息"
               :disabled="isStreaming"
               @keydown="onKeydown"
               rows="1"

@@ -172,6 +172,7 @@ uv venv --python 3.12.7
 .venv\Scripts\activate
 # 安装依赖
 cd D:\ai学习项目\my-rag\backend
+cd D:\code\my-rag\backend
 uv pip install -r requirements.txt -i https://mirrors.ustc.edu.cn/pypi/web/simple
 ```
 
