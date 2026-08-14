@@ -6,6 +6,7 @@
   4. 返回 DocumentChunk 列表（含来源、分数、完整 metadata）
 """
 from __future__ import annotations
+import logging
 import uuid
 from typing import Optional
 
@@ -14,6 +15,8 @@ from langchain_core.documents import Document
 from ..config import RAG_TOP_K, RAG_RERANK_TOP_N
 from ..store.vector_store import similarity_search_with_score
 from ..models.schemas import DocumentChunk
+
+logger = logging.getLogger(__name__)
 
 
 # ==================================
@@ -39,11 +42,12 @@ def retrieve(
     """
     # --- 第一步：大召回 ---
     recall_k = max(20, top_k or RAG_TOP_K)  # 至少 20，避免漏
-    # 阈值：显式传了就用；默认 0 不过滤（最大化召回，避免"明明有资料却检索不到"）
     th = 0.0 if threshold is None else threshold
 
     query = rewrite_query(question)
     docs_scores = similarity_search_with_score(query, k=recall_k, score_threshold=th)
+    logger.info(f"[retrieve] query='{query[:50]}', recall_k={recall_k}, threshold={th}, raw_hits={len(docs_scores)}")
+
     if not docs_scores:
         return []
 
@@ -59,13 +63,14 @@ def retrieve(
         chunks.append(DocumentChunk(
             chunk_id=meta.get("chunk_id") or meta.get("id") or uuid.uuid4().hex,
             content=doc.page_content,
-            # 来源优先级：source > file_name > 未知来源
             source_file=meta.get("source") or meta.get("file_name") or meta.get("filename") or "未知来源",
             page=meta.get("page") or meta.get("page_number"),
             score=round(float(sim), 4),
-            # 把所有 metadata 透传（方便 Prompt 拼 section_title、parent_content 等）
             metadata={k: v for k, v in meta.items()},
         ))
+
+    if chunks:
+        logger.info(f"[retrieve] 返回 {len(chunks)} 个块, top_score={chunks[0].score:.4f}, sources={[c.source_file for c in chunks]}")
     return chunks
 
 

@@ -465,6 +465,9 @@
 
   /* 深度思考按钮（黑底白字）*/
   .deep-think-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     background: #ffffff !important;
     color: #111827 !important;
     border: 1px solid #e5e7eb !important;
@@ -473,7 +476,9 @@
     height: 26px !important;
     font-size: 12px !important;
     font-weight: 500 !important;
-    transition: all .15s !important;
+    cursor: pointer !important;
+    font-family: inherit !important;
+    transition: background .15s, color .15s, border-color .15s !important;
   }
   .deep-think-btn:hover {
     border-color: #d1d5db !important;
@@ -481,7 +486,11 @@
   .deep-think-btn.on {
     background: #111827 !important;
     color: #ffffff !important;
-    border: none !important;
+    border: 1px solid #111827 !important;
+  }
+  .deep-think-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .toolbar-right {
@@ -660,7 +669,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <div class="sidebar-tip">当前会话暂存于内存</div>
+        <div class="sidebar-tip">我是最棒的小羊.jpg</div>
       </div>
     </aside>
 
@@ -679,22 +688,25 @@
         </div>
       </div>
 
-      <!-- 欢迎页 / 消息 -->
+      <!-- 欢迎页 -->
       <template v-if="messages.length === 0">
-        <div class="welcome">
-          <div class="welcome-icon">🌱</div>
-          <h1>你好呀，我是 MyRag AI 的小助手</h1>
-          <p class="sub">负责在这里陪伴你，解答你的问题，帮助你更好地探索技术世界。😊</p>
-          <p class="sub">有什么可以帮助你的吗？✨</p>
+        <div class="msg-list" ref="msgListRef">
+          <div class="welcome">
+            <div class="welcome-icon">🌱</div>
+            <h1>你好呀，我是 MyRag AI 的小助手</h1>
+            <p class="sub">负责在这里陪伴你，解答你的问题，帮助你更好地探索技术世界。😊</p>
+            <p class="sub">有什么可以帮助你的吗？✨</p>
+          </div>
         </div>
       </template>
 
+      <!-- 消息列表（知识库引用来源在 msg-list 外面，不要放进滚动区）-->
       <template v-else>
         <div class="msg-list" ref="msgListRef">
           <div class="msg-wrap">
             <div
               v-for="(m, idx) in messages"
-              :key="idx"
+              :key="m._uid || ('fallback_' + idx)"
               class="msg-row"
               :class="m.role"
             >
@@ -769,17 +781,17 @@
               <span class="sparkle">✦</span>
               <span class="dot"></span>
               <span class="model-name">GLM-4-Flash</span>
-              <span class="model-sub">(智谱·快速)</span>
+              <span class="model-sub">(智谱)</span>
               <span class="chev">▾</span>
             </div>
-            <el-button
+            <button
               class="deep-think-btn"
               :class="{ on: enableDeepThink }"
               @click="enableDeepThink = !enableDeepThink"
-              size="small"
+              :disabled="isStreaming"
             >
               <span style="margin-right:3px;">✦</span>深度思考
-            </el-button>
+            </button>
             <span class="toolbar-right">1 个模型可用</span>
           </div>
 
@@ -887,6 +899,10 @@ const app = createApp({
   setup() {
     const API_BASE = 'http://127.0.0.1:8000';
 
+    // 全局自增消息 uid（避免 Vue 按 index 重建 DOM 导致滚动条跳动 & ref 重置）
+    let _msgUidCounter = 0;
+    const _nextMsgUid = () => ('m_' + (++_msgUidCounter) + '_' + Date.now().toString(36));
+
     // ========== 状态 ==========
     const activeSessionId = ref('');
     const conversations = ref([]);
@@ -894,7 +910,7 @@ const app = createApp({
     const inputText = ref('');
     const isStreaming = ref(false);
     const lastSources = ref([]);
-    const enableDeepThink = ref(false);
+    const enableDeepThink = ref(false);   // 用户手动切换，**不会在会话结束 / 切换时自动重置**
 
     const showKnowledgeDrawer = ref(false);
     const indexedFiles = ref([]);
@@ -908,11 +924,15 @@ const app = createApp({
     );
 
     // ========== 工具 ==========
-    function scrollToBottom() {
+    function scrollToBottom(force = false) {
       nextTick(() => {
         const el = msgListRef.value;
         if (!el) return;
-        // 只在用户已接近底部时才自动滚动，避免用户查看历史时被强制拉回
+        if (force) {
+          el.scrollTop = el.scrollHeight;
+          return;
+        }
+        // 只在用户已接近底部时才自动滚动
         const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
         if (dist < 120) el.scrollTop = el.scrollHeight;
       });
@@ -1105,8 +1125,9 @@ const app = createApp({
         conv.title = q.slice(0, 20) + (q.length > 20 ? '…' : '');
       }
 
-      messages.value.push(reactive({ role: 'user', content: q }));
+      messages.value.push(reactive({ _uid: _nextMsgUid(), role: 'user', content: q }));
       const aiMsg = reactive({
+        _uid: _nextMsgUid(),
         role: 'ai',
         content: '',
         thinking: true,            // loading 思考中
@@ -1195,23 +1216,27 @@ const app = createApp({
 
             if (event === 'done') {
               aiMsg.thinking = false;
+              aiMsg._finalized = true;
               isStreaming.value = false;
               saveMessagesToCache(activeSessionId.value, messages.value);
+              scrollToBottom(true);  // 流结束后强制滚到底部
             }
             if (event === 'error') {
               aiMsg.thinking = false;
               aiMsg.content = '❌ 出错了：\n```\n' + (data || '未知错误') + '\n```';
+              aiMsg._finalized = true;
               isStreaming.value = false;
               saveMessagesToCache(activeSessionId.value, messages.value);
             }
           }
         }
 
-        if (isStreaming.value) {
+        if (isStreaming.value && !aiMsg._finalized) {
           aiMsg.thinking = false;
           if (!aiMsg.content) aiMsg.content = '（回复结束，但未收到内容）';
           isStreaming.value = false;
           saveMessagesToCache(activeSessionId.value, messages.value);
+          scrollToBottom(true);
         }
       } catch (e) {
         aiMsg.thinking = false;
