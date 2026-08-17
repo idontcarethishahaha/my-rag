@@ -41,6 +41,8 @@
     gap: 6px;
     flex-shrink: 0;
     border-right: none;
+    transition: width .25s ease, padding .25s ease;
+    overflow: hidden;
   }
 
   .brand-row {
@@ -144,6 +146,82 @@
     line-height: 1.5;
   }
 
+  /* ============ 侧边栏收起状态 ============ */
+  .sidebar.collapsed {
+    width: 52px;
+    padding: 12px 8px;
+    align-items: center;
+  }
+  .sidebar.collapsed .brand-row {
+    padding: 2px 0 10px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sidebar.collapsed .brand {
+    justify-content: center;
+  }
+  .sidebar.collapsed .sidebar-section-title {
+    display: none;
+  }
+  .sidebar.collapsed .conv-list {
+    margin-right: 0;
+    padding: 2px 0;
+  }
+  .sidebar.collapsed .conv-item {
+    justify-content: center;
+    padding: 8px;
+    position: relative;
+  }
+  .sidebar.collapsed .conv-item:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 56px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #111827;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .sidebar.collapsed .new-chat-btn {
+    padding: 0 !important;
+    justify-content: center !important;
+    height: 36px !important;
+  }
+  .sidebar.collapsed .new-chat-btn span {
+    margin-right: 0 !important;
+  }
+
+  /* 顶栏三条杠图标 */
+  .topbar-menu {
+    color: #374151;
+    cursor: pointer;
+    font-size: 18px;
+    margin-right: 10px;
+    transition: color .15s;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+  }
+  .topbar-menu:hover { color: #111827; }
+
+  /* 顶栏收起按钮 */
+  .topbar-back {
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 18px;
+    margin-right: 10px;
+    transition: color .15s;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+  }
+  .topbar-back:hover { color: #111827; }
+
   /* ============ 主区 ============ */
   .main {
     flex: 1;
@@ -165,12 +243,6 @@
   .topbar-left {
     display: flex; align-items: center; gap: 10px;
   }
-  .topbar-back {
-    color: #9ca3af; cursor: pointer; font-size: 18px;
-    transition: color .15s;
-    line-height: 1;
-  }
-  .topbar-back:hover { color: #111827; }
   .topbar-title {
     font-size: 14px; color: #111827; font-weight: 600;
   }
@@ -256,7 +328,8 @@
     display: flex; gap: 14px;
     margin-bottom: 26px;
   }
-  .msg-row.user { flex-direction: row-reverse; }
+  .msg-row.user { flex-direction: row-reverse; gap: 6px; }
+  .msg-row.user .msg-content { display: flex; justify-content: flex-end; }
   .avatar {
     width: 28px; height: 28px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
@@ -704,21 +777,21 @@
 <div id="app">
   <div class="app-shell">
     <!-- ============ 左侧边栏============ -->
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="brand-row">
         <div class="brand">
           <div class="brand-icon">🍅</div>
-          <span>MyRag AI</span>
+          <span v-show="!sidebarCollapsed">MyRag AI</span>
         </div>
-        <span class="brand-back" title="收起侧边栏">‹</span>
+        <span class="brand-back" title="收起侧边栏" @click="toggleSidebar">‹</span>
       </div>
 
       <el-button class="new-chat-btn" @click="newConversation">
         <span style="color:#22c55e; margin-right:6px; font-weight:600;">+</span>
-        新对话
+        <span v-show="!sidebarCollapsed">新对话</span>
       </el-button>
 
-      <div class="sidebar-section-title">今天</div>
+      <div class="sidebar-section-title" v-show="!sidebarCollapsed">今天</div>
       <div class="conv-list">
         <div
           v-for="conv in conversations"
@@ -726,16 +799,17 @@
           class="conv-item"
           :class="{ active: conv.session_id === activeSessionId }"
           @click="switchConversation(conv.session_id)"
+          :title="sidebarCollapsed ? conv.title : ''"
         >
           <span class="conv-diamond">⋄</span>
-          <span class="conv-title">{{ conv.title }}</span>
-          <el-icon class="del-btn" size="13" @click.stop="confirmDeleteConversation(conv)">
+          <span class="conv-title" v-show="!sidebarCollapsed">{{ conv.title }}</span>
+          <el-icon class="del-btn" size="13" @click.stop="confirmDeleteConversation(conv)" v-show="!sidebarCollapsed">
             <Delete />
           </el-icon>
         </div>
       </div>
 
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" v-show="!sidebarCollapsed">
         <div class="sidebar-tip">我是最棒的小羊.jpg</div>
       </div>
     </aside>
@@ -745,13 +819,15 @@
       <!-- 顶栏 -->
       <div class="topbar">
         <div class="topbar-left">
-          <span class="topbar-back">‹</span>
+          <!-- 三条杠图标（侧边栏收起时显示）-->
+          <span v-if="sidebarCollapsed" class="topbar-menu" @click="toggleSidebar" title="展开侧边栏">☰</span>
+          <span class="topbar-back" v-else @click="toggleSidebar">‹</span>
           <span class="topbar-title">
             {{ activeConversation ? activeConversation.title : '新对话' }}
           </span>
         </div>
         <div class="topbar-right" @click="showKnowledgeDrawer = true">
-          知识库
+          🍅知识库
         </div>
       </div>
 
@@ -1063,6 +1139,14 @@ const app = createApp({
     const showKnowledgeDrawer = ref(false);
     const indexedFiles = ref([]);
     const loadingFiles = ref(false);
+    // 侧边栏收起状态
+    const sidebarCollapsed = ref(localStorage.getItem('myrag_sidebar_collapsed') === 'true');
+    watch(sidebarCollapsed, (val) => {
+      localStorage.setItem('myrag_sidebar_collapsed', val ? 'true' : 'false');
+    });
+    function toggleSidebar() {
+      sidebarCollapsed.value = !sidebarCollapsed.value;
+    }
 
     const msgListRef = ref(null);
     const textareaRef = ref(null);
@@ -1371,7 +1455,6 @@ const app = createApp({
               aiMsg.thinking = false; // 有思考内容了，关闭 loading
               aiMsg.thinking_text += data || '';
               aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
-              saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom(false);
             }
 
@@ -1388,7 +1471,6 @@ const app = createApp({
             if (event === 'token') {
               aiMsg.thinking = false;
               aiMsg.content += data || '';
-              saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom(false);
             }
 
@@ -1397,7 +1479,8 @@ const app = createApp({
               aiMsg._finalized = true;
               isStreaming.value = false;
               saveMessagesToCache(activeSessionId.value, messages.value);
-              scrollToBottom(true);  // 流结束后强制滚到底部
+              // 延迟滚动，等 CSS 过渡动画完成后再滚到底部
+              setTimeout(() => scrollToBottom(true), 350);
             }
             if (event === 'error') {
               aiMsg.thinking = false;
@@ -1502,6 +1585,8 @@ const app = createApp({
       // 模型选择
       availableModels, selectedModelId, showModelDropdown,
       currentModel, toggleModelDropdown, selectModel,
+      // 侧边栏
+      sidebarCollapsed, toggleSidebar,
     };
   }
 });
