@@ -33,7 +33,7 @@ def list_models():
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
-        answer, thinking_text, sources = rag_service.ask_rag(
+        answer, thinking_text, sources, _debug_info = rag_service.ask_rag(
             question=req.question,
             session_id=req.session_id,
             top_k=req.top_k,

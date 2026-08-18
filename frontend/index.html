@@ -293,6 +293,10 @@
   .msg-list {
     flex: 1;
     overflow-y: auto;
+    /* 关键：禁用浏览器滚动锚定。
+       流式回答时 v-html 每个 token 都整体替换回答气泡 DOM，
+       Chrome 的 scroll anchoring 找不到锚点节点会导致滚动位置突跳（跳顶元凶之一）*/
+    overflow-anchor: none;
     padding: 24px 0 180px;
   }
 
@@ -506,6 +510,149 @@
     border: 1px solid #ececec;
   }
   .source-tag .score { color: #16a34a; font-weight: 500; }
+  .source-tag .rank-diff {
+    margin-left: 2px;
+    font-size: 10.5px;
+    padding: 0 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .source-tag .rank-diff.up   { color: #16a34a; background: #dcfce7; }
+  .source-tag .rank-diff.down { color: #dc2626; background: #fee2e2; }
+  .source-tag .rank-diff.same { color: #6b7280; background: #f3f4f6; }
+
+  /* 调试面板 */
+  .debug-panel {
+    max-width: 760px; margin: -18px auto 4px;
+    padding: 10px 40px 0;
+  }
+  .debug-panel > div {
+    background: rgba(249, 250, 251, 0.72);
+    border: 1px solid #e5e7eb;
+    border-radius: 9px;
+    padding: 9px 13px;
+    backdrop-filter: blur(6px);
+  }
+  .debug-title {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12.5px;
+    color: #374151;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .debug-title .sparkle { color: #8b5cf6; font-weight: 700; font-size: 11px; }
+  .debug-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px;
+    color: #4b5563;
+    line-height: 1.5;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+  }
+  .debug-row:last-child { margin-bottom: 0; }
+  .debug-label {
+    color: #9ca3af;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: 68px;
+  }
+  .debug-sub {
+    color: #6b7280;
+    font-size: 11.5px;
+  }
+  .debug-sub.fallback { color: #d97706; }
+
+  /* 意图 pill */
+  .intent-pill {
+    display: inline-flex; align-items: center;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 11.5px;
+    border: 1px solid transparent;
+  }
+  .intent-pill.kb_query  { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .intent-pill.follow_up { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+  .intent-pill.chat      { background: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+  .intent-pill.file_list { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+
+  /* 查询改写对比 */
+  .query-rewrite { align-items: flex-start; }
+  .query-rewrite > .debug-label { padding-top: 3px; }
+  .query-compare {
+    display: flex; align-items: center; gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+  .qc {
+    display: inline-flex; align-items: flex-start; gap: 6px;
+    max-width: 280px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+  }
+  .qc-tag {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.6;
+  }
+  .qc-old .qc-tag { background: #f3f4f6; color: #6b7280; }
+  .qc-new .qc-tag { background: #dcfce7; color: #166534; }
+  .qc-text {
+    font-size: 12px;
+    color: #374151;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .qc-arrow { color: #9ca3af; font-weight: 700; }
+
+  /* Rerank 状态条 */
+  .rerank-bar {
+    display: inline-block;
+    width: 110px;
+    height: 8px;
+    border-radius: 4px;
+    background: #e5e7eb;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .rerank-bar.ok .bar-sq       { background: #16a34a; height: 100%; display: block; }
+  .rerank-bar.fallback .bar-sq { background: #d97706; height: 100%; display: block; }
+
+  /* 内嵌在 AI 回答气泡后的调试面板 */
+  .msg-debug-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(249, 250, 251, 0.8);
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    max-width: 100%;
+    backdrop-filter: blur(6px);
+  }
+  .msg-debug-panel .query-rewrite > .debug-label { padding-top: 3px; }
+  .msg-debug-panel .qc {
+    max-width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+  .msg-debug-panel .qc-text {
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  /* 内嵌在 AI 回答气泡后的引用来源 */
+  .msg-sources {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 100%;
+  }
 
   /* ============ 底部输入区============ */
   .input-area {
@@ -832,7 +979,15 @@
       </div>
 
       <!-- 唯一滚动容器：欢迎页 + 消息列表 永远在同一个 msg-list 内，避免切换销毁导致 ref 失效 -->
-      <div class="msg-list" ref="msgListRef" @scroll="onScrollMsgList">
+      <!-- wheel/touchstart/keydown 标记"用户主动滚动"，配合 onScrollMsgList 的跳顶保护 -->
+      <div
+        class="msg-list"
+        ref="msgListRef"
+        @scroll="onScrollMsgList"
+        @wheel="markUserScroll"
+        @touchstart="markUserScroll"
+        @keydown="markUserScroll"
+      >
         <!-- 欢迎页（messages 为空时显示）-->
         <div v-if="messages.length === 0" class="welcome">
           <div class="welcome-icon">🍅</div>
@@ -894,6 +1049,99 @@
                   class="msg-bubble markdown-body"
                   v-html="renderMarkdown(m.content)"
                 ></div>
+
+                <!-- 本条 AI 自己的调试面板（紧跟回答之后，内嵌气泡样式） -->
+                <div v-if="m.debugInfo" class="msg-debug-panel">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
+                    <span style="color:#8b5cf6;font-weight:700;font-size:11px;">✦</span>
+                    <span style="font-size:12.5px;color:#374151;font-weight:600;">调试信息</span>
+                  </div>
+
+                  <!-- 1. 意图 pill -->
+                  <div class="debug-row">
+                    <span class="debug-label">意图路由</span>
+                    <span
+                      class="intent-pill"
+                      :class="m.debugInfo.intent"
+                    >{{ {
+                      kb_query: '知识库查询',
+                      follow_up: '追问联想',
+                      chat: '日常闲聊',
+                      file_list: '文件列表'
+                    }[m.debugInfo.intent] || m.debugInfo.intent }}</span>
+                    <span class="debug-sub">（glm-4-flash 分类）</span>
+                  </div>
+
+                  <!-- 2. Query 改写 -->
+                  <div v-if="m.debugInfo.rewritten_query" class="debug-row query-rewrite">
+                    <div class="debug-label">查询改写</div>
+                    <div class="query-compare">
+                      <div class="qc qc-old">
+                        <span class="qc-tag">原始</span>
+                        <span class="qc-text">{{ m.debugInfo.original_query }}</span>
+                      </div>
+                      <div class="qc-arrow">→</div>
+                      <div class="qc qc-new">
+                        <span class="qc-tag">改写后</span>
+                        <span class="qc-text">{{ m.debugInfo.rewritten_query }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 3. Rerank 状态条 -->
+                  <div v-if="m.debugInfo.retrieval" class="debug-row" style="margin-bottom:0;">
+                    <span class="debug-label">检索 / Rerank</span>
+                    <template v-if="m.debugInfo.retrieval.rerank_enabled">
+                      <span
+                        class="rerank-bar"
+                        :class="m.debugInfo.retrieval.rerank_backend ? 'ok' : 'fallback'"
+                      >
+                        <span class="bar-sq"
+                          :style="{ width: (m.debugInfo.retrieval.raw_hits > 0 ? Math.min(100, 100 * m.debugInfo.retrieval.final_count / m.debugInfo.retrieval.raw_hits) : 0) + '%' }"
+                        ></span>
+                      </span>
+                      <span class="debug-sub" v-if="m.debugInfo.retrieval.rerank_backend">
+                        ✅ {{ m.debugInfo.retrieval.rerank_backend === 'local' ? '本地 CrossEncoder' : 'SiliconFlow 远端 API' }}
+                        · Top {{ m.debugInfo.retrieval.final_count }} / {{ m.debugInfo.retrieval.raw_hits }}
+                        · 相关性 {{ (m.debugInfo.retrieval.top_relevance * 100).toFixed(0) }}%
+                      </span>
+                      <span class="debug-sub fallback" v-else>
+                        ⚠️ Rerank 调用失败，已自动降级为向量排序
+                        · Top {{ m.debugInfo.retrieval.final_count }} / {{ m.debugInfo.retrieval.raw_hits }}
+                      </span>
+                    </template>
+                    <span class="debug-sub" v-else>
+                      仅向量检索（未启用 Rerank）
+                      · Top {{ m.debugInfo.retrieval.final_count }} / {{ m.debugInfo.retrieval.raw_hits }}
+                      · 相关性 {{ (m.debugInfo.retrieval.top_relevance * 100).toFixed(0) }}%
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 本条 AI 自己的引用来源（内嵌在回答后） -->
+                <div v-if="m.sources && m.sources.length" class="msg-sources">
+                  <div class="source-tag" v-for="(s,i) in m.sources" :key="i">
+                    <el-icon size="11"><Document /></el-icon>
+                    <span>{{ s.source_file }}</span>
+                    <span class="score">{{ (s.score * 100).toFixed(0) }}%</span>
+                    <!-- Rerank 排名变化徽章 -->
+                    <span
+                      v-if="m.debugInfo && m.debugInfo.retrieval && m.debugInfo.retrieval.rerank_enabled && m.debugInfo.retrieval.rerank_backend
+                            && s.metadata?.__vec_rank !== undefined && s.metadata?.__final_rank !== undefined"
+                      class="rank-diff"
+                      :class="s.metadata.__final_rank < s.metadata.__vec_rank ? 'up' :
+                              (s.metadata.__final_rank > s.metadata.__vec_rank ? 'down' : 'same')"
+                    >
+                      <template v-if="s.metadata.__final_rank < s.metadata.__vec_rank">
+                        ↗️ 上升 {{ s.metadata.__vec_rank - s.metadata.__final_rank }}
+                      </template>
+                      <template v-else-if="s.metadata.__final_rank > s.metadata.__vec_rank">
+                        ↘️ 下降 {{ s.metadata.__final_rank - s.metadata.__vec_rank }}
+                      </template>
+                      <template v-else>➖ 排名不变</template>
+                    </span>
+                  </div>
+                </div>
               </template>
               <!-- 用户消息 -->
               <div v-else class="msg-bubble">{{ m.content }}</div>
@@ -902,14 +1150,7 @@
         </div>
       </div>
 
-      <!-- 来源标签（始终在 msg-list 外面，固定位置）-->
-      <div v-if="messages.length > 0 && lastSources.length" class="sources">
-        <div class="source-tag" v-for="(s,i) in lastSources" :key="i">
-          <el-icon size="11"><Document /></el-icon>
-          <span>{{ s.source_file }}</span>
-          <span class="score">{{ (s.score * 100).toFixed(0) }}%</span>
-        </div>
-      </div>
+      <!-- 调试面板 + 引用来源已迁移到"每条 AI 回答气泡之后"，避免位置奇怪和新消息覆盖消失问题 -->
 
       <!-- 回到底部箭头 -->
       <transition name="fade">
@@ -1076,6 +1317,7 @@ const app = createApp({
     const inputText = ref('');
     const isStreaming = ref(false);
     const lastSources = ref([]);
+    const lastDebugInfo = ref(null);
     // 从 localStorage 恢复深度思考状态
     const enableDeepThink = ref(localStorage.getItem('myrag_deep_think') === 'true');
     // 状态变化时保存到 localStorage
@@ -1180,12 +1422,25 @@ const app = createApp({
       });
     }
 
-    // 滚动监听：控制"回到底部"箭头显示/隐藏
+    // 滚动监听：控制"回到底部"箭头显示/隐藏 + 跳顶保护
+    // 用户主动滚动检测：wheel/touch/按键 300ms 内发生的滚动事件视为用户操作
+    let _userScrollAt = 0;
+    let _lastScrollTop = 0;
+    function markUserScroll() { _userScrollAt = Date.now(); }
     function onScrollMsgList() {
       const el = msgListRef.value;
       if (!el) return;
       const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
       showScrollBottom.value = dist > 200;
+      // 跳顶保护：非用户操作 + 单次滚动事件向上位移 > 600px
+      // （正常阅读不可能一步跳 600px，这是 v-html 重排/锚定失效引发的程序性跳动）→ 恢复原位
+      const isUserScroll = (Date.now() - _userScrollAt) < 300;
+      if (!isUserScroll && (_lastScrollTop - el.scrollTop) > 600 && _lastScrollTop > 600) {
+        console.log('[ScrollGuard] 检测到异常跳顶，恢复到', _lastScrollTop);
+        el.scrollTop = _lastScrollTop;
+        return; // 不更新 _lastScrollTop，保持恢复基准
+      }
+      _lastScrollTop = el.scrollTop;
     }
 
     // 点击"回到底部"箭头
@@ -1258,6 +1513,7 @@ const app = createApp({
       try { localStorage.setItem(LS_KEY_MSGS_PREFIX + sid, JSON.stringify(msgs.map(m => ({
         _uid: m._uid, role: m.role, content: m.content, thinking_text: m.thinking_text || '',
         _thinkingOpen: m._thinkingOpen, _thinkingMs: m._thinkingMs || 0,
+        sources: m.sources || [], debugInfo: m.debugInfo || null,
       })))); } catch {}
     }
     function loadMessagesFromCache(sid) {
@@ -1271,6 +1527,7 @@ const app = createApp({
           thinking: false, thinking_text: m.thinking_text || '',
           _thinkingOpen: m._thinkingOpen !== undefined ? m._thinkingOpen : false,
           _thinkingMs: m._thinkingMs || 0,
+          sources: m.sources || [], debugInfo: m.debugInfo || null,
         }));
       } catch { return null; }
     }
@@ -1293,7 +1550,7 @@ const app = createApp({
       }
       conversations.value.unshift({ session_id: sid, title: title });
       activeSessionId.value = sid;
-      messages.value = []; lastSources.value = [];
+      messages.value = []; lastSources.value = []; lastDebugInfo.value = null;
       saveActiveSessionId(sid); saveMessagesToCache(sid, []);
     }
 
@@ -1303,6 +1560,7 @@ const app = createApp({
       const cached = loadMessagesFromCache(sid);
       messages.value = (cached && cached.length) ? cached : [];
       lastSources.value = [];
+      lastDebugInfo.value = null;
       try {
         const resp = await fetch(`${API_BASE}/api/conversations/${sid}/messages`);
         if (resp.ok) {
@@ -1333,7 +1591,9 @@ const app = createApp({
       } catch (e) {
         console.error('加载历史消息失败:', e);
       }
-      scrollToBottom();
+      // 切换会话后直接定位到最新一条消息（强制滚动：
+      // 新渲染的容器 scrollTop=0、距底部 >150px，非强制跟滚永远不会触发，这就是"切会话停在顶部"的原因）
+      scrollToBottom(true);
     }
 
     async function confirmDeleteConversation(conv) {
@@ -1395,13 +1655,17 @@ const app = createApp({
         _thinkingOpen: enableDeepThink.value, // 深度思考模式下默认展开
         _thinkingStartAt: Date.now(),
         _thinkingMs: 0,
+        sources: [],                // 本条 AI 回答的引用来源（独立持有，不被后续消息覆盖）
+        debugInfo: null,            // 本条 AI 回答的调试信息（独立持有）
       });
       messages.value.push(aiMsg);
       lastSources.value = [];
+      lastDebugInfo.value = null;
       inputText.value = '';
       isStreaming.value = true;
       saveMessagesToCache(activeSessionId.value, messages.value);
-      scrollToBottom();
+      // 发送后强制滚到底：保证用户能立刻看到自己刚发的问题和接下来的流式回答
+      scrollToBottom(true);
 
       // 记录思考阶段是否结束
       let thinkingFinished = false;
@@ -1442,8 +1706,19 @@ const app = createApp({
             if (!event || rawData === null) continue;
             let data;
             try { data = JSON.parse(rawData); } catch { data = rawData; }
+            // 调试用：在 F12 Console 打印所有 SSE 事件流（方便排查 debug 事件有没有收到）
+            const _preview = typeof data === 'string' ? data.slice(0, 80) : JSON.stringify(data).slice(0, 80);
+            console.log(`[SSE] event=${event}`, _preview, data);
 
-            if (event === 'source')  { lastSources.value = data || []; }
+            if (event === 'source')  {
+              aiMsg.sources = data || [];
+              lastSources.value = aiMsg.sources;   // 保留全局兼容
+            }
+            if (event === 'debug')   {
+              aiMsg.debugInfo = data || null;
+              lastDebugInfo.value = aiMsg.debugInfo;  // 保留全局兼容
+              console.log('[DebugPanel] 本条 AI 收到调试信息：', aiMsg.debugInfo);
+            }
 
             // 思考中 loading 提示
             if (event === 'thinking') {
@@ -1478,9 +1753,26 @@ const app = createApp({
               aiMsg.thinking = false;
               aiMsg._finalized = true;
               isStreaming.value = false;
+              // 记录 done 时刻的滚动位置，用于稍后检测"内容重排引发的跳顶"
+              const elNow = msgListRef.value;
+              const scrollTopAtDone = elNow ? elNow.scrollTop : 0;
               saveMessagesToCache(activeSessionId.value, messages.value);
-              // 延迟滚动，等 CSS 过渡动画完成后再滚到底部
-              setTimeout(() => scrollToBottom(true), 350);
+              // 回答结束后智能处理滚动（350ms 等最终 markdown 渲染稳定）：
+              //   1) 若此刻被重排甩到了顶部（scrollTop 归零但之前明明在很靠下）→ 自愈回底部看回答
+              //   2) 若用户本来就接近底部 → 轻轻跟到底
+              //   3) 若用户上滑在阅读历史 → 完全不动，绝不打扰
+              setTimeout(() => {
+                const el = msgListRef.value;
+                if (!el) return;
+                if (scrollTopAtDone > 600 && el.scrollTop < 50) {
+                  // 异常跳顶自愈：直接回到回答末尾
+                  console.log('[ScrollGuard] done 后检测到跳顶，自愈回底部');
+                  el.scrollTop = el.scrollHeight;
+                  _lastScrollTop = el.scrollTop;
+                  return;
+                }
+                scrollToBottom(false); // 非强制：仅当用户接近底部时才跟
+              }, 350);
             }
             if (event === 'error') {
               aiMsg.thinking = false;
@@ -1573,10 +1865,10 @@ const app = createApp({
     return {
       API_BASE,
       activeSessionId, conversations, messages, inputText,
-      isStreaming, lastSources, enableDeepThink,
+      isStreaming, lastSources, lastDebugInfo, enableDeepThink,
       showKnowledgeDrawer, indexedFiles, loadingFiles,
       msgListRef, textareaRef, activeConversation,
-      showScrollBottom, onScrollMsgList, clickScrollBottom,
+      showScrollBottom, onScrollMsgList, clickScrollBottom, markUserScroll,
       newConversation, switchConversation, confirmDeleteConversation,
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,

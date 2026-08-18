@@ -69,6 +69,20 @@ RAG_MAX_TOKENS_LIMIT = int(os.getenv("RAG_MAX_TOKENS_LIMIT", "8000"))
 RAG_SUMMARY_THRESHOLD = int(os.getenv("RAG_SUMMARY_THRESHOLD", "4000"))
 
 # ==================================
+# Rerank 重排序配置（默认复用 SiliconFlow Embedding 配置）
+# 走 Cohere 兼容的 /v1/rerank 接口
+# ==================================
+RERANK_ENABLE = os.getenv("RERANK_ENABLE", str(RAG_ENABLE_RERANK)).lower() == "true"
+RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "auto").strip().lower()  # auto | local | remote
+RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_DEVICE = os.getenv("RERANK_DEVICE", "cpu").strip().lower()      # cpu | cuda
+# 默认复用 EMBEDDING 配置（如果用的是 SiliconFlow 就能直接用）
+RERANK_BASE_URL = _clean_url(os.getenv("RERANK_BASE_URL", EMBEDDING_BASE_URL))
+RERANK_API_KEY = os.getenv("RERANK_API_KEY", EMBEDDING_API_KEY)
+RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "10.0"))  # 秒，超时直接降级
+RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", str(RAG_RERANK_TOP_N)))
+
+# ==================================
 # 路径
 # ==================================
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
@@ -92,6 +106,9 @@ def reload():
     load_dotenv(_env_path, override=True)
     global API_KEY, BASE_URL, MODEL_ID
     global EMBEDDING_API_KEY, EMBEDDING_BASE_URL, EMBEDDING_MODEL, EMBEDDING_DIMENSION
+    global RERANK_ENABLE, RERANK_PROVIDER, RERANK_MODEL, RERANK_DEVICE
+    global RERANK_BASE_URL, RERANK_API_KEY, RERANK_TIMEOUT, RERANK_TOP_N
+    global RAG_ENABLE_RERANK, RAG_RERANK_TOP_N
     API_KEY = os.getenv("OPENAI_API_KEY", "")
     BASE_URL = _clean_url(os.getenv("OPENAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"))
     MODEL_ID = os.getenv("MODEL_NAME", "glm-4.5-flash")
@@ -99,3 +116,13 @@ def reload():
     EMBEDDING_BASE_URL = _clean_url(os.getenv("EMBEDDING_BASE_URL", BASE_URL))
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "0"))
+    RAG_ENABLE_RERANK = os.getenv("RAG_ENABLE_RERANK", "false").lower() == "true"
+    RAG_RERANK_TOP_N = int(os.getenv("RAG_RERANK_TOP_N", "3"))
+    RERANK_ENABLE = os.getenv("RERANK_ENABLE", str(RAG_ENABLE_RERANK)).lower() == "true"
+    RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "auto").strip().lower()
+    RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+    RERANK_DEVICE = os.getenv("RERANK_DEVICE", "cpu").strip().lower()
+    RERANK_BASE_URL = _clean_url(os.getenv("RERANK_BASE_URL", EMBEDDING_BASE_URL))
+    RERANK_API_KEY = os.getenv("RERANK_API_KEY", EMBEDDING_API_KEY)
+    RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "10.0"))
+    RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", str(RAG_RERANK_TOP_N)))
