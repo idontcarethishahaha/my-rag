@@ -1198,7 +1198,464 @@ Vue 模板响应式渲染：
 | 10 | 切换会话清空面板 | 从对话 A 切到对话 B（B 没发过新消息） | 调试面板消失 |
 | 11 | 后端非流式接口不报错 | `POST /api/chat` 随便问一句 | HTTP 200 正常返回 ChatResponse，无 500 ValueError unpack |
 
-**后端重启命令**（在 `backend` 目录下）：
-```powershell
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+---
+
+# 第六轮修改：父块上下文（Parent Chunk Context）
+
+生成时间：2026-08-18
+
+---
+
+## 一、本轮修改总览
+
+检索到的 chunk 因为切块策略（500 字符/块），可能只包含问题相关信息的**片段**，缺少前后文语境。比如：
+- 问"它的副作用是什么？"，检索到的 chunk 只包含"副作用包括头晕"而没有前半句"该药物..."
+- 问"蜂医怎么部署？"，检索到的 chunk 只包含"部署在关键路口"而没有前半句"蜂医的部署位置..."
+
+本轮在**索引阶段**为每个 chunk 注入"父块上下文"（前一块 + 自身 + 后一块的合并内容）到 `metadata.parent_content` 中，检索时由已有的 `_format_context()` 自动优先使用该扩展上下文，让 LLM 获得更完整的语境。
+
+| # | 改动 | 涉及文件 |
+|---|------|----------|
+| 1 | 为每个 chunk 注入相邻 3 块合并的 parent_content | `backend/app/services/indexer_service.py` |
+
+### 设计目标
+
 ```
+索引阶段（indexer_service.py）：
+  文档切块 → [chunk0, chunk1, chunk2, chunk3, ...]
+    ↓
+  为每个 chunk 计算 parent_content：
+    chunk0: chunk0 + chunk1 的合并内容（无前一块）
+    chunk1: chunk0 + chunk1 + chunk2 的合并内容
+    chunk2: chunk1 + chunk2 + chunk3 的合并内容
+    ...
+    chunkN: chunkN-1 + chunkN 的合并内容（无后一块）
+    ↓
+  存入 metadata["parent_content"] → 向量库
+
+检索阶段（retriever_service.py → prompt_templates.py）：
+  向量检索 → 命中 chunk1
+    ↓
+  DocumentChunk.metadata["parent_content"] = chunk0+chunk1+chunk2
+    ↓
+  _format_context() 优先读取 parent_content
+    ↓
+  LLM 获得 chunk0+chunk1+chunk2 的完整上下文
+```
+
+**关键特性**：
+- 仅在索引阶段修改，检索和生成阶段零改动
+- parent_content 存在于 metadata 中，随 chunk 一起存入向量库并检索回来
+- 提示模板中 `_format_context()` 已优先使用 `parent_content`，无需额外修改
+- 对已有索引的文件：需要重新索引（删除后重新上传）才能生效
+
+---
+
+## 二、各文件详细修改
+
+### 2.1 `backend/app/services/indexer_service.py`（修改）
+
+在"给每个块打元数据（file_id / source）"之后新增父块上下文注入逻辑。
+
+**改动位置**：`index_uploaded_file()` 函数内，第 161-170 行。
+
+```python
+# 为每个 chunk 注入父块上下文（前一块 + 自身 + 后一块的合并内容）
+# 让 LLM 在检索时获得更完整的语境，避免因切块导致信息碎片化
+for i, ch in enumerate(chunks):
+    parts = []
+    if i > 0:
+        parts.append(chunks[i - 1].page_content)
+    parts.append(ch.page_content)
+    if i < len(chunks) - 1:
+        parts.append(chunks[i + 1].page_content)
+    ch.metadata["parent_content"] = "\n\n".join(parts)
+```
+
+**实现细节**：
+- 使用 `chunks[i-1].page_content`（前一块文本）+ `ch.page_content`（自身文本）+ `chunks[i+1].page_content`（后一块文本）三块合并
+- 块间用 `\n\n` 分隔（与原始文档段落分隔一致）
+- 首块（i=0）只有自身 + 后一块
+- 尾块（i=len-1）只有前一块 + 自身
+- 单块文档（len=1）只有自身
+
+---
+
+## 三、数据流验证
+
+```
+用户上传"明日方舟.txt"
+  ↓
+index_uploaded_file()
+  ↓
+split_documents() → 产生 4 个 chunk
+  ↓
+for i, ch in enumerate(chunks):          ← 新增循环
+    ch.metadata["parent_content"] = "前一块 + 自身 + 后一块"
+  ↓
+store.add_documents(chunks)              ← 含 parent_content 的 metadata 入库
+  ↓
+用户提问 → retrieve(rewritten_query)
+  ↓
+similarity_search_with_score()           ← 返回的 Document 含 parent_content 在 metadata
+  ↓
+DocumentChunk(metadata=dict(doc.metadata))
+  ↓
+build_rag_messages() → _format_context()
+  ↓
+meta.get("parent_content") →            ← 优先命中
+    → "[资料1] 文件名\n前一块内容\n\n自身内容\n\n后一块内容"
+  ↓
+LLM 收到完整上下文，回答更准确
+```
+
+---
+
+## 四、潜在风险与边界
+
+| # | 风险 | 缓解 |
+|---|------|------|
+| 1 | 已有索引的文件不会自动获得 parent_content，需要重新上传 | 删除文件后重新上传即可；diff.md 已标注 |
+| 2 | parent_content 可能比原有的 content 长 2-3 倍，增加 token 消耗 | 合理：LLM 本就需要更多上下文才能准确理解；token 增加量 = chunk_size × 2 ≈ 1000 tokens/块，总 token 仍在可控范围 |
+| 3 | 相邻块可能是无关内容（如文档不同章节交接处） | 概率低：分块策略按自然段落/句子切分，相邻块通常是连续的同一话题 |
+| 4 | 如果 chunk 本身已经足够长，parent_content 增加冗余 | 默认 500 字符/块，叠加 3 块 ~1500 字符，对 glm-4.5-flash 的 128K 上下文窗口来说完全可以接受 |
+| 5 | parent_content 在 debug 面板中显示为 content 而非 parent_content | 调试面板显示的是 `chunk.content`（chunk 自身内容），不影响 LLM 实际使用的上下文 |
+
+---
+
+## 五、验证清单
+
+重启后端（**必须**） + 刷新前端后验证：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 新上传文件含 parent_content | 删除"明日方舟.txt" → 重新上传 → 问文档中的问题 | AI 回答内容更饱满，能引用相邻块的信息；后端日志无异常 |
+| 2 | 旧文件不受影响 | 上传一个新文件并询问 | 旧文件仍可正常检索回答（只是没有 parent_content 加成） |
+| 3 | 单块文档 | 上传一个极短文件（<500 字符） | 正常索引，parent_content = 自身内容 |
+| 4 | 不影响已有用户 | 发送闲聊（"你好"） | 意图路由正常，不走检索，不受 parent_content 影响 |
+| 5 | 不影响已有 RAG 流程 | 关闭 Rerank / 不启用深度思考 | 所有功能正常，parent_content 只在 LLM 生成时增加上下文，不影响其他流程 |
+
+---
+
+# 第七轮修改：多种分块策略（recursive / intelligent / table / parent_child）
+
+生成时间：2026-08-18
+
+参考项目：`D:\ai学习项目\RAG-Pro\backend\app\core\chunker.py`
+
+---
+
+## 一、本轮修改总览
+
+**核心目标**：借鉴 RAG-Pro 的多策略分块器，从原来仅有的 `recursive` 一种，扩展为 **4 种可选用法**，根据文件类型/配置自动选择最合适的切块方案，提升检索召回质量。
+
+| # | 改动点 | 说明 | 涉及文件 |
+|---|--------|------|----------|
+| 1 | 新增 3 种分块器 | `IntelligentChunker`、`TableChunker`、`ParentChildChunker`（原只有 `RecursiveChunker`） | `backend/app/splitters/text_splitter.py` |
+| 2 | 新增分块方法配置 | `.env` 中 `CHUNK_METHOD` 可指定全局默认（recursive/intelligent/table/parent_child） | `backend/app/config.py` |
+| 3 | 索引端接入多策略 | 上传文件时按扩展名启发式选策略（CSV/Excel→table，其他→CHUNK_METHOD 默认）；parent_child 走两层分块专用路径，子块 metadata 直接写入真正的父块完整文本 | `backend/app/services/indexer_service.py` |
+| 4 | 检索 debug 扩字段 | debug_info 的 chunks_debug 新增 `chunk_method`、`has_parent_content`，调试面板能看出每块的来源策略 | `backend/app/services/retriever_service.py` |
+
+**4 种分块方法对比**：
+
+| 方法 | 适用文档 | 特点 | 父块上下文 |
+|------|----------|------|------------|
+| `recursive`（默认） | 通用文本 | 按 \n\n→\n→句末→逗号→空格→逐字 递归切，overlap 重叠块尾 | 相邻 3 块拼接（近似） |
+| `intelligent` | 有章节结构的文档（书籍/论文/规范） | 先识别 `# / 第X章 / 序号标题` 等标题行做结构分块；过短章节自动合并；超长章节退回 recursive | 相邻 3 块拼接（近似） |
+| `table` | CSV / Excel / Markdown 表格 | CSV 每一行前缀带完整表头列名，MD 表格整张保留，非表格部分退回 recursive | 相邻 3 块拼接（近似） |
+| `parent_child` | 对上下文精度要求高的文档 | 真正的两层分块：父块 1536 token(0 overlap) → 子块 512 token(64 overlap)。**检索的是子块，给 LLM 的是完整父块文本**，避免相邻 3 块拼接把不相关内容混进来 | 子块命中后取**真实父块完整内容**（精确） |
+
+---
+
+## 二、各文件详细修改
+
+### 2.1 `backend/app/splitters/text_splitter.py`（完全重写）
+
+#### 2.1.1 统一 TextChunk 数据结构（与 RAG-Pro 对齐）
+
+新增 `ChunkMethod = Literal["recursive", "intelligent", "table", "parent_child"]` 类型标注；`TextChunk` 增补 `parent_chunk_index` 字段，专门用于 parent_child 模式。
+
+#### 2.1.2 RecursiveChunker 内部接口改造成 chunk_pages
+
+原来只有 `chunk_documents(LangChain Doc) → LangChain Doc`，现在增加中间层 `chunk_pages(list[dict]) → list[TextChunk]`，其他 3 个分块器复用同样的 pages → TextChunk 模式，最后统一走 `_text_chunks_to_langchain()` 转 LangChain Document。
+
+#### 2.1.3 新增 IntelligentChunker
+
+- `_detect_sections()`：正则 `^(#{1,6}\s+.+|第[一二三四五六七八九十\d]+[章节部分].+|[一二三四五六七八九十\d]+[、\.]\s*.+)$` 匹配标题行，切成 `{title, text}` 段
+- `_merge_small_sections()`：过小章节（<min_chunk_tokens=50）自动与下一段合并，避免出现过碎的 chunk
+- 超过 chunk_size 的段：构造临时 page，退回 `RecursiveChunker.chunk_pages()` 递归切
+
+#### 2.1.4 新增 TableChunker
+
+- CSV/TSV/XLSX（metadata 含 `headers`）：每一行用 `f"表格数据（列：{', '.join(headers)}）\n{line}"` 包装，确保检索"某列最大值是多少"这种行级 query 时，chunk 里直接带列名，语义自足
+- Markdown 表格：正则 `(\|.+\|[\r\n]+\|[-:\s|]+\|[\r\n]+(?:\|.+\|[\r\n]+)+)` 提取整张表作单 chunk
+- 非表格内容：构造临时 page，退回 RecursiveChunker
+
+#### 2.1.5 新增 ParentChildChunker（核心改动）
+
+```
+第一层：parent_chunker = RecursiveChunker(parent_size=1536, overlap=0)
+第二层：child_chunker  = RecursiveChunker(child_size=512, overlap=64)
+```
+
+流程：
+1. 先用 `parent_chunker` 把文档切成大块父块（overlap=0，父块之间不重叠）
+2. 对每一个父块，构造临时 page，用 `child_chunker` 切成子块
+3. 每个子块写入：
+   - `parent_chunk_index = parent.chunk_index`（引用）
+   - `child.metadata["parent_content"] = parent.text`（**完整父块文本直接入库**，检索时省得再查 DB）
+
+`chunk_pages()` 返回 `(child_chunks, parent_chunks)` tuple；`chunk_documents()` 只返回子块（兼容对外统一入口）。
+
+#### 2.1.6 工厂函数 get_chunker() + 兼容接口 split_documents()
+
+```python
+def get_chunker(
+    method: ChunkMethod = "recursive",
+    chunk_size: int = 512,       # tokens
+    chunk_overlap: int = 64,     # tokens
+    min_chunk_size: int = 50,    # tokens，仅 intelligent
+): ...
+
+def split_documents(
+    documents: list[Document],
+    chunk_size: int = 500,        # 传字符数，与老接口兼容
+    chunk_overlap: int = 80,
+    method: ChunkMethod = "recursive",   # 新增参数
+) -> list[Document]: ...
+```
+
+字符数→tokens 换算规则保持不变：`token_size = max(256, chars // 2)`。
+
+### 2.2 `backend/app/config.py`（新增 CHUNK_METHOD）
+
+在 `RAG 超参数` 区块顶部新增：
+
+```python
+# 分块方法: recursive(递归) / intelligent(按章节) / table(表格优化) / parent_child(两层父子分块)
+CHUNK_METHOD = os.getenv("CHUNK_METHOD", "recursive").strip().lower()
+```
+
+默认值 `recursive`，保持与现有行为完全一致，不破坏老用户配置。
+
+### 2.3 `backend/app/services/indexer_service.py`
+
+#### 2.3.1 导入扩展
+
+从 config 导入 `CHUNK_METHOD`；从 splitters 导入 `get_chunker` 和 `ChunkMethod`。
+
+#### 2.3.2 新增 `_guess_chunk_method(filename, sample_text)` 启发式判定
+
+```
+CSV/XLSX/XLS/TSV 扩展名 → "table"
+文本里 |: 出现 或 连续两行 |（Markdown 表格特征）→ "table"
+其他 → CHUNK_METHOD 配置值（合法性校验，非法值退回 "recursive"）
+```
+
+这是一种**启发式**——用户随时可以通过 `.env` 里指定 `CHUNK_METHOD=parent_child` 覆盖全部文件。
+
+#### 2.3.3 `index_uploaded_file()` 分两路分块
+
+```
+method == "parent_child"?
+  ├─ YES → 构造 pages → chunker.chunk_pages(pages) → 拿 (child_chunks, _)
+  │        → _text_chunks_to_langchain 转 LangChain Doc
+  │        → 子块 metadata 已自带 parent_content（chunk_pages 写入）
+  └─ NO  → split_documents(docs, method=method) → 返回 LangChain Doc
+           → 非 parent_child 方法，再走相邻 3 块拼接注入 parent_content
+```
+
+每块还会额外打 `ch.metadata["chunk_method"] = method`，用于检索阶段 debug。
+
+#### 2.3.4 返回值新增 chunk_method
+
+`index_uploaded_file()` 返回的 dict 新增 `"chunk_method": method` 字段，方便前端以后做 UI 展示（比如"这个文件用了什么分块"）。
+
+### 2.4 `backend/app/services/retriever_service.py`
+
+在第三步 DocumentChunk→chunks_debug 映射里扩字段：
+
+```python
+chunks_debug.append({
+    "chunk_id": chunk.chunk_id,
+    "source_file": chunk.source_file,
+    "chunk_method": meta.get("chunk_method") or "legacy_parent_adjacent",
+    "has_parent_content": bool(meta.get("parent_content")),
+    "vec_rank": vec_rank,
+    "final_rank": final_rank,
+    "change": change,
+})
+```
+
+`prompt_templates.py` 里 `_format_context()` 的 `meta.get("parent_content")` 逻辑无需改动，天然兼容两种注入方式（相邻 3 块拼接 / 父块真实文本）。
+
+---
+
+## 三、切换方法步骤
+
+### 方法 1：全局默认（改 .env）
+
+```env
+# 可选值: recursive / intelligent / table / parent_child
+CHUNK_METHOD=parent_child
+```
+
+改完重启后端，新上传的文件全部走指定策略。
+
+### 方法 2：对某个文件单独指定（当前实现）
+
+当前实现是**按扩展名启发式 + .env 全局默认**。如果后续要做"上传弹窗里选分块方式"，只需在 index_router 里接收一个 `chunk_method` 表单字段，传给 `index_uploaded_file(file_bytes, filename, method=...)`。
+
+---
+
+## 四、潜在风险与边界
+
+| # | 风险 | 缓解 |
+|---|------|------|
+| 1 | 老索引文件 chunk_method/parent_content 字段不全 | `chunks_debug` 已经退回 `"legacy_parent_adjacent"`，LLM 侧无感知；想享受新策略只需重传 |
+| 2 | parent_child 子块数量比其他策略多 ~3 倍（因为 child 比父块碎） | ChromaDB 本地文件存储，容量不是瓶颈；子块越小，嵌入向量对局部语义越敏感，召回更准 |
+| 3 | intelligent 的章节标题正则未覆盖"无编号标题"场景 | 标题没被检测到的段会走 `if current["text"].strip()` 兜底段落，语义还是完整的，只是没拿到 section_title |
+| 4 | table 对 CSV 中文列名做 `', '.join(headers)` 如果列多会显得长 | 合理：列名就是语义的一部分，对"XX 列的 XX"这种查询有决定性提升；实在过长可在 chunk_size 估算下自然切分 |
+| 5 | CHUNK_METHOD 写错名字 | `_guess_chunk_method` 做了白名单校验，非法值退回 `recursive`，不会中断流程 |
+
+---
+
+## 五、验证清单
+
+**重启后端 + 重新上传文件后**验证（父块上下文需要重建索引才生效，老 chunk 没有新字段）：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 默认 recursive 仍正常 | 不传 CHUNK_METHOD .env，上传 txt 提问 | 回答正常；chunks_debug 中 chunk_method="recursive" |
+| 2 | CSV 自动选 table | 上传一个 .csv 文件，问其中一列的数值 | 每一行 chunk 都带 "表格数据（列：xxx）"前缀，AI 直接定位行 |
+| 3 | parent_child 生效 | CHUNK_METHOD=parent_child，上传文本后提问 → 查 debug | chunks_debug 中 chunk_method="parent_child"，has_parent_content=true |
+| 4 | 父块上下文优于相邻 3 块 | 用 parent_child 模式上传，问跨子块但在同一父块的问题 | LLM 引用连续父块内容，不会出现"相邻块交界是章节边界"的拼接噪声 |
+| 5 | intelligent 识别章节 | 把一份有"第1章…第2章…"的文件上传，问"第2章讲了什么" | chunk.section_title 记录了章节标题，debug 面板可验证 |
+| 6 | 不破坏 rerank / 意图 / 深度思考 | 深度思考+Rerank+知识库查询组合提问 | 所有原有功能流程正常，debug 事件 token 输出符合预期 |
+| 7 | 不影响闲聊分支 | 发送 "你好" + "你是谁" | 意图识别 chat → 直接回答，不触发检索流程 |
+
+---
+
+# 第八轮修改：上传与分块分离 + 前端分块方式选择器
+
+生成时间：2026-08-18
+
+参考项目：`D:\ai学习项目\RAG-Pro`（两段式上传-分块设计）
+
+---
+
+## 一、本轮修改总览
+
+**核心目标**：参考 RAG-Pro 的两段式设计，将"上传文件"和"分块入库"拆成两个独立步骤，用户上传文件后在前端选择分块方式，再执行分块入库。
+
+| # | 改动点 | 说明 | 涉及文件 |
+|---|--------|------|----------|
+| 1 | 上传与分块分离 | 原 `index_uploaded_file()` 拆为 `upload_and_parse()` + `chunk_and_store()` | `backend/app/services/indexer_service.py` |
+| 2 | 新增 3 个 API 端点 | `POST /{file_id}/chunk`（分块入库）、`GET /methods`（分块方式列表）；原有 `POST /upload` 改为仅解析 | `backend/app/routers/index_router.py` |
+| 3 | Schema 扩展 | 新增 `ChunkRequest`、`ChunkResponse`、`ChunkMethodItem`；`IndexStatusResponse` 新增 `chunk_method` 等字段 | `backend/app/models/schemas.py` |
+| 4 | 前端分块选择器 | 文件列表中，待分块文件显示下拉选 + 执行按钮；已入库文件显示分块方式标签 | `frontend/index.html` |
+
+**流程对比**：
+
+```
+旧流程：上传文件 → 自动分块(递归) → 自动入库 → 返回"切成 N 块"
+新流程：上传文件 → 解析(不分块) → 用户选分块方式 → 执行分块 → 入库 → 返回"切成 N 块"
+```
+
+---
+
+## 二、各文件详细修改
+
+### 2.1 `backend/app/services/indexer_service.py`（完全重写）
+
+#### 核心拆分
+
+原 `index_uploaded_file()` 拆为两个函数：
+
+| 函数 | 职责 | 返回 |
+|------|------|------|
+| `upload_and_parse(file_bytes, filename)` | 保存到磁盘 → Load 解析文档 → 缓存到 `_parsed_docs` 内存 | `{file_id, status: "parsed", chunks_count: 0}` |
+| `chunk_and_store(file_id, chunk_method)` | 从内存/磁盘取文档 → Split 分块 → Embed 嵌入 → Store 入库 | `{file_id, chunks_count, chunk_method, status: "success"}` |
+
+#### 新增数据结构
+
+- `CHUNK_METHODS_INFO`：4 种分块方式的元数据列表，供 `GET /methods` 返回
+- `IndexProgress` 新增 `chunk_method` 字段，记录已使用的分块方式
+- `_parsed_docs: dict[str, list[LCDocument]]`：内存缓存解析后的文档，避免重复解析
+
+#### `_restore_from_disk()` 改进
+
+恢复时检查向量库中是否有该 file_id 的 chunk：
+- 有 chunk → `status="done"`
+- 无 chunk → `status="parsed"`（待分块）
+
+#### `chunk_and_store()` 容错
+
+- 内存缓存丢失（如重启后）→ 从磁盘重新解析文件
+- 文件已分块 → 报错"请先删除后重新上传"
+- 分块方法校验 → 不合法报错
+
+### 2.2 `backend/app/routers/index_router.py`
+
+新增端点：
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `POST /api/index/{file_id}/chunk` | POST | 接收 `{chunk_method}` JSON body，执行分块入库 |
+| `GET /api/index/methods` | GET | 返回可用分块方式列表 |
+
+修改端点：
+
+| 端点 | 变更 |
+|------|------|
+| `POST /api/index/upload` | 从"上传+分块+入库"改为"仅上传+解析" |
+
+### 2.3 `backend/app/models/schemas.py`
+
+新增模型：
+- `ChunkRequest`：分块请求体（`chunk_method` 字段）
+- `ChunkResponse`：分块入库响应（含 `chunks_count` + `chunk_method`）
+- `ChunkMethodItem`：分块方式信息（`value` / `label` / `description` / `scenario`）
+
+修改模型：
+- `IndexFileResponse`：`chunks_count` 默认 0，`status` 默认 `"parsed"`
+- `IndexStatusResponse`：新增 `chunk_method`、`file_size`、`file_ext` 字段
+
+### 2.4 `frontend/index.html`
+
+#### HTML 变更
+
+文件列表卡片改为条件布局：
+- `status === "parsed"`：卡片变列布局，下方显示分块方式下拉框 + 执行分块按钮
+- `status === "done"`：显示块数 + 分块方式标签（如"父子分块"）
+- `status === "indexing"`：显示"处理中"
+
+#### CSS 新增
+
+- `.file-card--column`：列布局（待分块时展开）
+- `.chunk-row`：分块选择行（下拉框 + 按钮横排）
+
+#### JS 新增
+
+- `chunkMethods` ref + `loadChunkMethods()`：从 `GET /api/index/methods` 加载
+- `getChunkMethodLabel(value)`：值→标签映射
+- `executeChunk(f)`：调 `POST /{file_id}/chunk`，成功后刷新文件列表
+- `loadIndexedFiles()`：给每个文件加 `selected_method` 默认值和 `_chunking` 状态
+- `customUpload()`：提示语从"入库成功"改为"解析成功，请选择分块方式"
+
+---
+
+## 三、验证清单
+
+**重启后端 + 刷新前端后**验证：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 上传只解析不分块 | 上传一个 txt 文件 | 提示"解析成功，请选择分块方式"；文件列表显示"待分块"标签 + 下拉框 + 执行按钮 |
+| 2 | 选择分块方式后执行 | 选"递归分块" → 点"执行分块" | 提示"分块成功，切成 N 块"；文件状态变为"已入库"，显示块数和分块方式 |
+| 3 | 父子分块 | 选"父子分块" → 执行 | 成功入库，debug 面板 chunk_method="parent_child" |
+| 4 | 表格分块 | 上传 CSV → 选"表格分块" → 执行 | 成功入库，每行 chunk 带表头前缀 |
+| 5 | 重启后恢复 | 上传文件不执行分块 → 重启后端 | 文件列表仍显示"待分块"，可正常选择方式执行分块 |
+| 6 | 已分块文件不可重复 | 对"已入库"文件尝试再次分块 | 报错"文件已分块入库，请先删除后重新上传" |
+| 7 | 删除后重新上传 | 删除文件 → 重新上传 → 选不同方式分块 | 全流程正常，新分块方式生效 |
+| 8 | 对话功能不受影响 | 分块入库后正常提问 | RAG 问答正常，debug 面板显示 chunk_method |

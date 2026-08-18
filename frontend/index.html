@@ -888,6 +888,16 @@
   .file-icon.md  { background: #f5f3ff; color: #7c3aed; }
   .file-icon.htm { background: #fff7ed; color: #ea580c; }
 
+  .file-card--column {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .chunk-row {
+    display: flex; gap: 8px; margin-top: 8px;
+    padding-top: 8px; border-top: 1px dashed #f0f0f0;
+    width: 100%;
+  }
+
   .file-info { flex: 1; min-width: 0; }
   .file-name {
     font-size: 13.5px; font-weight: 500; color: #111827;
@@ -1270,6 +1280,7 @@
           v-for="f in indexedFiles"
           :key="f.file_id"
           class="file-card"
+          :class="{ 'file-card--column': f.status === 'parsed' }"
         >
           <div class="file-icon" :class="getFileIconClass(f.file_ext)">
             {{ getFileIconText(f.file_ext) }}
@@ -1279,16 +1290,44 @@
             <div class="file-meta">
               <span>{{ formatSize(f.file_size) }}</span>
               <span class="dot"></span>
-              <span>{{ f.chunks_count || 0 }} 块</span>
-              <span class="dot"></span>
               <el-tag v-if="f.status==='done'" type="success" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">已入库</el-tag>
+              <el-tag v-else-if="f.status==='parsed'" type="warning" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">待分块</el-tag>
               <el-tag v-else-if="f.status==='indexing'" type="warning" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">处理中</el-tag>
               <el-tag v-else type="danger" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">{{ f.status }}</el-tag>
+              <template v-if="f.status==='done'">
+                <span class="dot"></span>
+                <span>{{ f.chunks_count || 0 }} 块</span>
+                <span v-if="f.chunk_method" class="dot"></span>
+                <span v-if="f.chunk_method" style="color:#a78bfa;">{{ getChunkMethodLabel(f.chunk_method) }}</span>
+              </template>
             </div>
           </div>
           <el-icon class="file-del" size="15" @click="confirmDeleteFile(f)">
             <Delete />
           </el-icon>
+          <!-- 待分块时显示分块方式选择 + 执行按钮 -->
+          <div v-if="f.status === 'parsed'" class="chunk-row">
+            <el-select v-model="f.selected_method" size="small" placeholder="选择分块方式" style="flex:1;">
+              <el-option
+                v-for="m in chunkMethods"
+                :key="m.value"
+                :label="m.label"
+                :value="m.value"
+              >
+                <span>{{ m.label }}</span>
+                <span style="float:right; color:#9ca3af; font-size:11px;">{{ m.scenario }}</span>
+              </el-option>
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="f._chunking"
+              @click="executeChunk(f)"
+              style="flex-shrink:0;"
+            >
+              执行分块
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -1381,6 +1420,7 @@ const app = createApp({
     const showKnowledgeDrawer = ref(false);
     const indexedFiles = ref([]);
     const loadingFiles = ref(false);
+    const chunkMethods = ref([]);
     // 侧边栏收起状态
     const sidebarCollapsed = ref(localStorage.getItem('myrag_sidebar_collapsed') === 'true');
     watch(sidebarCollapsed, (val) => {
@@ -1800,6 +1840,18 @@ const app = createApp({
     }
 
     // ========== 知识库 ==========
+    async function loadChunkMethods() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/index/methods`);
+        if (resp.ok) chunkMethods.value = await resp.json();
+      } catch {}
+    }
+
+    function getChunkMethodLabel(value) {
+      const m = chunkMethods.value.find(m => m.value === value);
+      return m ? m.label : value;
+    }
+
     async function customUpload({ file }) {
       const form = new FormData();
       form.append('file', file);
@@ -1815,7 +1867,7 @@ const app = createApp({
           throw new Error(errMsg);
         }
         const data = await resp.json();
-        ElementPlus.ElMessage.success(`「${file.name}」入库成功，切成 ${data.chunks_count} 块`);
+        ElementPlus.ElMessage.success(`「${file.name}」解析成功，请选择分块方式后执行分块`);
         await loadIndexedFiles();
       } catch (e) {
         ElementPlus.ElMessage.error(e.message || '上传失败');
@@ -1827,9 +1879,48 @@ const app = createApp({
       loadingFiles.value = true;
       try {
         const resp = await fetch(`${API_BASE}/api/index/status`);
-        if (resp.ok) indexedFiles.value = await resp.json();
+        if (resp.ok) {
+          const files = await resp.json();
+          // 给待分块文件加上 selected_method 默认值和 _chunking 状态
+          indexedFiles.value = files.map(f => ({
+            ...f,
+            selected_method: 'recursive',
+            _chunking: false,
+          }));
+        }
       } catch {}
       finally { loadingFiles.value = false; }
+    }
+
+    async function executeChunk(f) {
+      if (!f.selected_method) {
+        ElementPlus.ElMessage.warning('请先选择分块方式');
+        return;
+      }
+      f._chunking = true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/index/${f.file_id}/chunk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chunk_method: f.selected_method }),
+        });
+        if (!resp.ok) {
+          let errMsg = `分块失败 (HTTP ${resp.status})`;
+          try {
+            const text = await resp.text();
+            const errData = JSON.parse(text);
+            errMsg = errData.detail || errData.message || errMsg;
+          } catch {}
+          throw new Error(errMsg);
+        }
+        const data = await resp.json();
+        ElementPlus.ElMessage.success(`「${f.file_name}」分块成功，切成 ${data.chunks_count} 块`);
+        await loadIndexedFiles();
+      } catch (e) {
+        ElementPlus.ElMessage.error(e.message || '分块失败');
+      } finally {
+        f._chunking = false;
+      }
     }
 
     async function confirmDeleteFile(f) {
@@ -1858,6 +1949,7 @@ const app = createApp({
     onMounted(async () => {
       await loadModels();
       await loadConversations();
+      await loadChunkMethods();
       await loadIndexedFiles();
       document.addEventListener('click', onDocClick);
     });
@@ -1872,6 +1964,7 @@ const app = createApp({
       newConversation, switchConversation, confirmDeleteConversation,
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,
+      chunkMethods, executeChunk, getChunkMethodLabel,
       getFileIconClass, getFileIconText, formatSize,
       toggleThinking, formatThinkingTime,
       // 模型选择

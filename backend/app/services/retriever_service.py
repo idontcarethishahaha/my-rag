@@ -137,7 +137,7 @@ def retrieve(
             rerank_backend = _last_rerank_backend or "remote"
             top_relevance = round(float(docs_scores_final[0][1]), 4)
             top_score = top_relevance
-            src3 = [d[0].metadata.get("source", "?")[:20] for d, _ in docs_scores_final[:3]]
+            src3 = [d.metadata.get("source", "?")[:20] for d, _ in docs_scores_final[:3]]
             logger.info(
                 f"[retrieve] rerank OK, keep {len(docs_scores_final)}/{raw_hits}, "
                 f"top_relevance={top_score:.4f}, top_sources={src3}, backend={rerank_backend}"
@@ -146,12 +146,17 @@ def retrieve(
             docs_scores.sort(key=lambda x: x[1], reverse=True)
             docs_scores_final = docs_scores[:keep_n]
             rerank_backend = "downgraded"
+            if docs_scores_final and top_relevance is None:
+                top_relevance = round(float(docs_scores_final[0][1]), 4)
             logger.info(f"[retrieve] rerank 降级（失败/超时/无可用后端），按向量分数截断 top_{keep_n}")
     else:
         docs_scores.sort(key=lambda x: x[1], reverse=True)
         docs_scores_final = docs_scores[:keep_n]
         if enable_rerank and not RERANK_API_KEY and not _has_local_reranker_model():
             logger.warning("[retrieve] enable_rerank=True 但 RERANK_API_KEY 未配置且无本地模型，跳过 rerank")
+        # 未启用 rerank 时，用向量检索的最高分作为 top_relevance
+        if docs_scores_final and top_relevance is None:
+            top_relevance = round(float(docs_scores_final[0][1]), 4)
 
     # --- 第三步：统一格式 DocumentChunk + 计算排名变化 ---
     chunks: list[DocumentChunk] = []
@@ -173,6 +178,10 @@ def retrieve(
         meta["__final_rank"] = final_rank
         meta["__change"] = change
 
+        # parent_child 或相邻 3 块模式都可能带 parent_content；
+        # 这里只记录到 metadata，prompt 构建时统一优先取 parent_content
+        chunk_method = meta.get("chunk_method") or "legacy_parent_adjacent"
+
         chunk = DocumentChunk(
             chunk_id=meta.get("chunk_id") or meta.get("id") or uuid.uuid4().hex,
             content=doc.page_content,
@@ -185,6 +194,8 @@ def retrieve(
         chunks_debug.append({
             "chunk_id": chunk.chunk_id,
             "source_file": chunk.source_file,
+            "chunk_method": chunk_method,
+            "has_parent_content": bool(meta.get("parent_content")),
             "vec_rank": vec_rank,
             "final_rank": final_rank,
             "change": change,

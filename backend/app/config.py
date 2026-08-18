@@ -59,6 +59,8 @@ VECTOR_DB_PORT = int(os.getenv("VECTOR_DB_PORT", "6333"))
 # ==================================
 # RAG 超参数
 # ==================================
+# 分块方法: recursive(递归) / intelligent(按章节) / table(表格优化) / parent_child(两层父子分块)
+CHUNK_METHOD = os.getenv("CHUNK_METHOD", "recursive").strip().lower()
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "500"))
 RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "80"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "6"))

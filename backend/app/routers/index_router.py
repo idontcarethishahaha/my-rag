@@ -1,31 +1,64 @@
 """
-文件索引路由（知识库管理）
-  POST   /api/index/upload     上传文件入库
-  GET    /api/index/status     列出所有文件状态
-  GET    /api/index/status/{file_id}  单个文件状态
-  DELETE /api/index/{file_id}  删除一个文件的索引
+文件索引路由（知识库管理）—— 两段式设计
+  POST   /api/index/upload              上传文件 + 解析（不分块）
+  POST   /api/index/{file_id}/chunk     按指定方式分块 + 入库
+  GET    /api/index/methods             获取可用分块方式列表
+  GET    /api/index/status              列出所有文件状态
+  GET    /api/index/status/{file_id}    单个文件状态
+  DELETE /api/index/{file_id}           删除一个文件的索引
 """
 from __future__ import annotations
 import traceback
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import BaseModel
 
 from ..services import indexer_service
-from ..models.schemas import IndexFileResponse, IndexStatusResponse
+from ..models.schemas import (
+    IndexFileResponse, IndexStatusResponse,
+    ChunkResponse, ChunkMethodItem,
+)
 
 router = APIRouter(prefix="/api/index", tags=["知识库索引"])
 
 
+class ChunkBody(BaseModel):
+    """分块请求体"""
+    chunk_method: str = "recursive"
+
+
 @router.post("/upload", response_model=IndexFileResponse)
-async def upload_and_index(file: UploadFile = File(..., description="支持 PDF/Word/Excel/MD/TXT/HTML")):
+async def upload_and_parse(file: UploadFile = File(..., description="支持 PDF/Word/Excel/MD/TXT/HTML/CSV")):
+    """第一步：上传文件 + 解析内容（不分块、不入库）"""
     try:
         content = await file.read()
-        result = indexer_service.index_uploaded_file(content, file.filename)
+        result = indexer_service.upload_and_parse(content, file.filename)
         return IndexFileResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"索引失败: {e}")
+        raise HTTPException(status_code=500, detail=f"上传解析失败: {e}")
+
+
+@router.post("/{file_id}/chunk", response_model=ChunkResponse)
+def chunk_and_store(file_id: str, body: ChunkBody):
+    """第二步：按指定方式分块 + 嵌入 + 入库"""
+    try:
+        result = indexer_service.chunk_and_store(file_id, body.chunk_method)
+        return ChunkResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"分块入库失败: {e}")
+
+
+@router.get("/methods", response_model=list[ChunkMethodItem])
+def get_chunk_methods():
+    """获取可用分块方式列表"""
+    return [ChunkMethodItem(**m) for m in indexer_service.get_chunk_methods()]
 
 
 @router.get("/status", response_model=list[IndexStatusResponse])

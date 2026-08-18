@@ -10,22 +10,47 @@ from pydantic import BaseModel, Field
 
 # ---------- 文件上传 / 索引 ----------
 class IndexFileResponse(BaseModel):
-    """文件上传入库响应"""
+    """文件上传响应（仅解析，未分块）"""
+    file_id: str = Field(description="文件唯一ID")
+    file_name: str = Field(description="原始文件名")
+    chunks_count: int = Field(default=0, description="切分块数（上传时为0）")
+    status: str = Field(default="parsed", description="状态: parsed/success")
+    message: Optional[str] = Field(default=None, description="提示信息")
+
+
+class ChunkRequest(BaseModel):
+    """分块请求"""
+    chunk_method: str = Field(default="recursive", description="分块方式: recursive/intelligent/table/parent_child")
+
+
+class ChunkResponse(BaseModel):
+    """分块入库响应"""
     file_id: str = Field(description="文件唯一ID")
     file_name: str = Field(description="原始文件名")
     chunks_count: int = Field(description="切分块数")
-    status: str = Field(default="success", description="索引结果")
-    message: Optional[str] = Field(default=None, description="提示信息")
+    chunk_method: str = Field(description="使用的分块方式")
+    status: str = Field(default="success", description="分块结果")
+
+
+class ChunkMethodItem(BaseModel):
+    """分块方式信息"""
+    value: str = Field(description="方式标识")
+    label: str = Field(description="显示名称")
+    description: str = Field(description="方式说明")
+    scenario: str = Field(description="适用场景")
 
 
 class IndexStatusResponse(BaseModel):
     """索引任务状态"""
     file_id: str
     file_name: str
-    status: str  # pending / indexing / done / failed
+    status: str  # pending / parsed / indexing / done / failed
     progress: float = 0.0
     chunks_count: int = 0
     error: Optional[str] = None
+    chunk_method: Optional[str] = None
+    file_size: int = 0
+    file_ext: str = ""
 
 
 class DocumentChunk(BaseModel):
