@@ -44,9 +44,9 @@ _CLASSIFY_SYSTEM = """你是一个意图分类器。根据用户问题和最近�
 返回格式（严格 JSON，不要 markdown 代码块）：
 {"intent": "意图标签", "rewritten_query": "改写后的问题"}
 
-改写规则：
-- 如果是 follow_up，必须把指代词替换为具体内容，例如历史中提到"蜂医"，用户问"它有什么功效"，改写为"蜂医有什么功效"
-- 如果是 chat / kb_query / file_list，rewritten_query 直接返回原问题
+改写规则（严格遵守）：
+- 只有 follow_up 需要改写：把指代词替换为具体内容（例：历史提到"蜂医"，用户问"它有什么功效"，改写为"蜂医有什么功效"）
+- chat / kb_query / file_list：rewritten_query 必须**原样返回**用户的原问题，不要添加任何问号、不要拆分句子、不要重组
 - rewritten_query 不能为空"""
 
 _CLASSIFY_USER_TEMPLATE = """最近对话历史:

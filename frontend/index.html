@@ -1082,7 +1082,7 @@
                     <span class="debug-sub">（glm-4-flash 分类）</span>
                   </div>
 
-                  <!-- 2. Query 改写 -->
+                  <!-- 2. Query 改写（意图层：追问指代消解） -->
                   <div v-if="m.debugInfo.rewritten_query" class="debug-row query-rewrite">
                     <div class="debug-label">查询改写</div>
                     <div class="query-compare">
@@ -1095,6 +1095,34 @@
                         <span class="qc-tag">改写后</span>
                         <span class="qc-text">{{ m.debugInfo.rewritten_query }}</span>
                       </div>
+                    </div>
+                  </div>
+
+                  <!-- 2.5 多查询分解（检索层） -->
+                  <div
+                    v-if="m.debugInfo.retrieval && m.debugInfo.retrieval.search_queries && m.debugInfo.retrieval.search_queries.length > 1"
+                    class="debug-row query-rewrite"
+                  >
+                    <div class="debug-label">多查询分解 <span class="debug-sub">（{{ m.debugInfo.retrieval.search_queries.length }} 路 · RRF 融合）</span></div>
+                    <div class="query-compare" style="flex-direction:column;align-items:stretch;gap:4px;">
+                      <div class="qc qc-new" v-for="(q, qi) in m.debugInfo.retrieval.search_queries" :key="qi"
+                           :style="qi === 0 ? '' : 'background:#f3f4f6;'">
+                        <span class="qc-tag" :style="qi === 0 ? 'background:#8b5cf6;' : 'background:#9ca3af;'">
+                          {{ qi === 0 ? '主' : '子' + qi }}
+                        </span>
+                        <span class="qc-text">{{ q }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 2.6 HyDE 假设文档（可选） -->
+                  <div
+                    v-if="m.debugInfo.retrieval && m.debugInfo.retrieval.hyde_doc"
+                    class="debug-row query-rewrite"
+                  >
+                    <div class="debug-label">HyDE 假设文档 <span class="debug-sub">（用假设答案的语义检索）</span></div>
+                    <div class="qc qc-new" style="width:100%;">
+                      <span class="qc-text" style="white-space:pre-wrap;">{{ m.debugInfo.retrieval.hyde_doc }}</span>
                     </div>
                   </div>
 

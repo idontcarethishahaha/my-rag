@@ -129,10 +129,12 @@ def ask_rag(
 
     # 6) 写回记忆（写原始 question，不是改写后的）
     memory.append(session_id, question, answer)
+    search_queries = retrieval_debug.get("search_queries", [])
+    main_query = search_queries[0] if search_queries else rewritten_query
     debug = {
         "intent": intent,
         "original_query": question,
-        "rewritten_query": rewritten_query if rewritten_query != question else None,
+        "rewritten_query": main_query if main_query != question else None,
         "retrieval": retrieval_debug,
     }
     return answer, thinking_text, chunks, debug
@@ -239,13 +241,16 @@ def ask_rag_stream(
         # ---- 4) kb_query / follow_up → 完整 RAG 流程 ----
         # 检索（用改写后的 query）
         chunks, retrieval_debug = retrieve(rewritten_query, top_k=top_k)
+        # 用多查询分解的主查询作为改写结果展示
+        search_queries = retrieval_debug.get("search_queries", [])
+        main_query = search_queries[0] if search_queries else rewritten_query
         # 调试信息：意图 + 改写 + 检索/rerank 排名变化
         yield {
             "event": "debug",
             "data": {
                 "intent": intent,
                 "original_query": question,
-                "rewritten_query": rewritten_query if rewritten_query != question else None,
+                "rewritten_query": main_query if main_query != question else None,
                 "retrieval": retrieval_debug,
             },
         }

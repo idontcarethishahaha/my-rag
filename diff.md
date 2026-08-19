@@ -1659,3 +1659,181 @@ CHUNK_METHOD=parent_child
 | 6 | 已分块文件不可重复 | 对"已入库"文件尝试再次分块 | 报错"文件已分块入库，请先删除后重新上传" |
 | 7 | 删除后重新上传 | 删除文件 → 重新上传 → 选不同方式分块 | 全流程正常，新分块方式生效 |
 | 8 | 对话功能不受影响 | 分块入库后正常提问 | RAG 问答正常，debug 面板显示 chunk_method |
+
+---
+
+# 第九轮修改：Query 改写 + Hybrid Search + 置信度评分 + 关键词/问题生成
+
+生成时间：2026-08-18
+
+---
+
+## 一、本轮修改总览
+
+| # | 功能 | 说明 | 涉及文件 |
+|---|--------|------|----------|
+| 1 | Query 改写 | >50字用glm-4-flash压缩为关键词 | `retriever_service.py` |
+| 2 | Hybrid Search | dense+BM25 sparse → RRF融合 | `vector_store.py`、`utils/bm25.py` |
+| 3 | 置信度评分 | 0.6*top+0.4*avg 加权分级 | `retriever_service.py` |
+| 4 | 关键词+问题生成 | 每chunk提取5关键词+生成3问题 | `keyword_service.py`、`indexer_service.py` |
+
+## 二、新增文件
+
+- `backend/app/services/keyword_service.py`：extract_keywords() + generate_questions()
+- `backend/app/utils/bm25.py`：BM25Index + rrf_fuse()
+
+## 三、修改文件
+
+### retriever_service.py
+- rewrite_query()：空壳 → 真正LLM改写（>50字触发）
+- retrieve()：新增enable_hybrid参数；debug_info新增confidence/confidence_label/search_mode/rewritten_query
+- 修复rerank分支的d[0].metadata bug → d.metadata
+
+### vector_store.py
+- 新增get_all_documents() + hybrid_search()
+
+### indexer_service.py
+- chunk_and_store()：分块时自动提取keywords和questions存入metadata
+
+## 四、验证清单
+
+| # | 验证项 | 预期结果 |
+|---|--------|----------|
+| 1 | Hybrid Search | debug面板显示search_mode=hybrid |
+| 2 | 短query不改写 | rewritten_query=null |
+| 3 | 长query改写 | rewritten_query为压缩后关键词 |
+| 4 | 置信度 | 显示confidence值和label |
+| 5 | 关键词提取 | has_keywords=true |
+| 6 | 问题生成 | has_questions=true |
+| 7 | BM25稀疏检索 | 关键词命中文档排名上升 |
+| 8 | RRF融合 | 两路都命中文档排名更靠前 |
+| 9 | Rerank不受影响 | hybrid结果上rerank正常 |
+| 10 | 对话正常 | chat和kb_query分支不受影响 |
+| 11 | 空库不报错 | 文档数0/1时降级为dense |
+
+---
+
+# 第十轮修改：Multi-Query 多查询分解 + HyDE 假设文档（查询重构彻底重构）
+
+生成时间：2026-08-19
+
+参考：用户提供的"四大查询重构技术"（提示工程 / 多查询分解 / 退步提示 / HyDE）+ RAG-Pro
+
+---
+
+## 一、问题背景
+
+第九轮的 query 改写存在两个问题：
+1. **两条改写链路互相打架**：debug 面板显示的 `rewritten_query` 是 intent 层的（其 prompt 规定 kb_query 时原样返回），而检索层的关键词改写在 `retriever_service` 里，用户根本看不到
+2. **50 字阈值**：检索层改写只对 >50 字的 query 触发，大部分 query 直接跳过；且单条改写幅度太小（LLM 倾向最小改动）
+
+## 二、本轮方案：多查询分解 + HyDE（四大技术中的两个）
+
+```
+question
+  → intent 层（不变：意图分类 + follow_up 指代消解）
+  → 检索层查询重构（新增）：
+      ① Multi-Query 分解：LLM 一次调用生成
+         主查询（关键词+同义词扩展）+ 2 个子查询（不同视角拆解）
+      ② HyDE（可选）：LLM 生成一段"假设答案"文档
+  → 多路检索：每个查询 dense + BM25 sparse 各一路
+     + HyDE 文档 dense 一路 → 全部 RRF 融合
+  → rerank（用主查询） → 截断 → 置信度
+```
+
+解决"改写幅度太小"的根本方式：**不再依赖单条改写，而是拆成多条互补查询**——涵盖面广的问题（如"各种玩法+特殊玩法+长期玩法"）会被拆成多路分别检索，各自召回再融合。
+
+## 三、代码变更
+
+| 文件 | 变更 |
+|---|---|
+| `config.py` | 新增 `MULTI_QUERY_ENABLE`(默认true) / `MULTI_QUERY_COUNT`(3) / `HYDE_ENABLE`(默认false) / `HYDE_DOC_LEN`(200) |
+| `retriever_service.py` | 删除单条 rewrite_query 的 LLM 改写；新增 `generate_multi_queries()`（Multi-Query JSON 分解 + HyDE 生成，失败降级为 [原问题]）；`retrieve()` 接入 `hybrid_search_multi`；debug_info 用 `search_queries`/`hyde_doc` 替代 `rewritten_query` |
+| `vector_store.py` | 新增 `hybrid_search_multi(queries, hyde_doc, k)`：BM25 索引只建一次，每查询 dense+sparse 各一路，HyDE 加一路 dense，递归 RRF 融合；旧 `hybrid_search()` 变为兼容壳 |
+| `.env.example` | 新增"查询重构"配置区块 |
+| `frontend/index.html` | debug 面板新增"多查询分解"区块（主/子查询标签分色）+ "HyDE 假设文档"区块（开启时显示） |
+
+## 四、前端 debug 面板新结构
+
+```
+✦ 调试信息
+├── 意图路由：[知识库查询]（glm-4-flash 分类）
+├── 查询改写（仅 follow_up 追问时显示：原始 → 改写后）
+├── 多查询分解（3 路 · RRF 融合）
+│   ├── [主] 明日方舟 游戏 玩法 特殊玩法 活动玩法 长期玩法 常驻玩法
+│   ├── [子1] 明日方舟 日常玩法 系统功能
+│   └── [子2] 明日方舟 活动 限时玩法 常驻内容
+├── HyDE 假设文档（HYDE_ENABLE=true 时显示）
+└── 检索 / Rerank：状态条 + Top N/M + 相关性
+```
+
+## 五、性能说明
+
+- Multi-Query：+1 次 glm-4-flash 调用（~200ms）+ 每路 1 次 dense 嵌入（3 路 ~300ms）
+- HyDE（默认关）：额外 +1 次 LLM + 1 次嵌入
+- BM25 索引每次检索重建（当前文档量小可接受；未来优化：chunk 入库时增量维护索引）
+
+## 六、验证清单
+
+重启后端（需彻底重启，勿依赖 --reload）+ 强刷前端后：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 多查询分解生效 | 提问"我想了解一下明日方舟这个游戏里面的各种玩法，特别是一些特殊玩法和长期玩法" | debug 面板显示 3 路查询，主查询为关键词组合 |
+| 2 | 主查询关键词化 | 同上 | 主查询不再是原句，而是"明日方舟 游戏 玩法 …"形式 |
+| 3 | 子查询差异化 | 同上 | 子查询聚焦不同侧面（日常玩法 / 活动玩法） |
+| 4 | 短问题也分解 | 提问"蜂医是什么"（6 字以上） | 也会分解为多查询（无 50 字门槛） |
+| 5 | RRF 融合生效 | 后端日志 | `[hybrid_multi] queries=3, routes=6+, fused=N` |
+| 6 | Rerank 正常 | 开启 rerank 提问 | rerank 在多路融合结果上重排，相关性显示正常 |
+| 7 | HyDE 开关 | .env 设 HYDE_ENABLE=true 重启 | debug 面板显示"HyDE 假设文档"区块 |
+| 8 | LLM 失败降级 | 断网/改错 API key 提问 | 降级为单条原问题检索，不报错 |
+| 9 | 追问仍正常 | 先问蜂医，再问"它有什么功效" | intent 层改写为"蜂医有什么功效"（原有功能不变） |
+| 10 | 检索质量提升 | 同一长问题对比第十轮前后回答 | 覆盖面更全（特殊玩法/长期玩法都有内容） |
+
+---
+
+# 第十轮·补丁 A：修复多查询子查询差异化不足
+
+生成时间：2026-08-19
+
+## 一、问题背景
+
+第十轮上线后实测发现：多查询分解虽然生效（debug 面板显示 3 路），但**子查询互相几乎相同**。
+
+例如用户问"明日方舟肉鸽模式、基建系统、干员养成、危机合约"时，模型输出：
+
+```
+主：明日方舟 肉鸽模式 基建系统 干员养成 危机合约 长期玩法
+子1：明日方舟 肉鸽模式 基建系统 干员养成 危机合约 玩法介绍   ← 几乎相同，只换后缀
+子2：明日方舟 肉鸽模式 基建系统 干员养成 危机合约 系统特点   ← 几乎相同，只换后缀
+```
+
+**根因**：Prompt 只要求"从不同视角拆分"，但未提供足够有区分度的示例，LLM 倾向最小改动，只在相同内容上替换尾缀。这样的多路检索毫无意义——每路召回基本相同的文档，RRF 融合退化为单路。
+
+## 二、修复方案：强化子查询差异化约束
+
+修改 `retriever_service.py` 的 `_MULTI_QUERY_SYSTEM` Prompt：
+
+| 改动 | 旧 | 新 |
+|---|---|---|
+| 子查询规则 | "从不同视角拆解，聚焦一个侧面"（模糊） | **"每个子查询必须聚焦原问题中一个独立的子话题/子领域，关键词交集应 < 50%"**（硬约束） |
+| 显式禁止 | 无 | **"❌ 禁止在相同内容上换后缀（如玩法介绍/系统特点/内容说明——这是无效的）"** |
+| 示例 | "明日方舟 日常玩法 系统功能"（仍含全部关键词） | **明日方舟肉鸽/基建/干员养成/危机合约逐个拆开**（每个子查询只含对应子话题少数关键词）|
+| 额外示例 | 无 | 增加番茄工作法示例（原理 vs 应用场景） |
+
+## 三、代码变更
+
+| 文件 | 变更 |
+|---|---|
+| `retriever_service.py` L67-L99 | 重写 `_MULTI_QUERY_SYSTEM`：明确禁止换后缀、强制独立子话题、关键词交集<50%、增加明日方舟 4 子话题与番茄工作法示例 |
+
+## 四、验证清单
+
+重启后端 + 强刷前端后：
+
+| # | 验证项 | 操作 | 预期结果 |
+|---|--------|------|----------|
+| 1 | 子查询差异化 | 提问含多子话题的长问题 | 子查询聚焦各自独立子话题，关键词交集明显 < 50% |
+| 2 | 不再换后缀 | 同上 | 不再出现"玩法介绍 / 系统特点 / 内容说明"这类仅换尾缀的查询 |
+| 3 | 多路召回 | 观察后端日志 | `routes=6+`，各子查询召回的 chunk 来源不同 |
+| 4 | RRF 融合质量 | 对比第十轮 | 不同子话题的内容都能体现在回答里 |

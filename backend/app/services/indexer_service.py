@@ -282,11 +282,15 @@ def chunk_and_store(file_id: str, chunk_method: str = "recursive") -> dict:
         if not chunks:
             raise RuntimeError("分块结果为空")
 
-        # 打元数据
+        # 打元数据 + 关键词提取 + 问题生成
+        from .keyword_service import extract_keywords, generate_questions
         for ch in chunks:
             ch.metadata["file_id"] = file_id
             ch.metadata.setdefault("source", prog.file_name)
             ch.metadata["chunk_method"] = method
+            text = ch.page_content or ""
+            ch.metadata["keywords"] = extract_keywords(text, top_k=5)
+            ch.metadata["questions"] = generate_questions(text, count=3)
 
         # 非 parent_child：相邻 3 块拼接注入 parent_content
         if method != "parent_child":

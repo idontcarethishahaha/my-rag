@@ -71,6 +71,16 @@ RAG_MAX_TOKENS_LIMIT = int(os.getenv("RAG_MAX_TOKENS_LIMIT", "8000"))
 RAG_SUMMARY_THRESHOLD = int(os.getenv("RAG_SUMMARY_THRESHOLD", "4000"))
 
 # ==================================
+# 查询重构（Query Rewriting）
+# 1. Multi-Query 多查询分解：LLM 把问题拆成 主查询(关键词+同义词) + N 个子查询，多路检索 RRF 融合
+# 2. HyDE 假设文档：LLM 编一段"假设答案"，用它的向量去搜真文档（弥合问句与陈述句文档的语义鸿沟）
+# ==================================
+MULTI_QUERY_ENABLE = os.getenv("MULTI_QUERY_ENABLE", "true").lower() == "true"
+MULTI_QUERY_COUNT = int(os.getenv("MULTI_QUERY_COUNT", "3"))  # 总查询数（1 主 + 2 子）
+HYDE_ENABLE = os.getenv("HYDE_ENABLE", "false").lower() == "true"
+HYDE_DOC_LEN = int(os.getenv("HYDE_DOC_LEN", "200"))  # 假设文档目标字数
+
+# ==================================
 # Rerank 重排序配置（默认复用 SiliconFlow Embedding 配置）
 # 走 Cohere 兼容的 /v1/rerank 接口
 # ==================================
