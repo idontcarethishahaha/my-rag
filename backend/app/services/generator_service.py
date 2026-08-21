@@ -1,48 +1,30 @@
 """
-LLM 生成服务（完全参考 tomatocat-agent 的 LLMProvider 实现）
+LLM 生成服务（参考 tomatocat-agent + RAG-Pro 的 LLMManager）
 
-关键改动：
-1. 支持多模型：glm-4-flash、glm-4.5-flash 等，默认 glm-4.5-flash
-2. 普通模式 → LangChain ChatOpenAI
-3. 深度思考模式 → 直接用 AsyncOpenAI + extra_body={"enable_thinking": True}
-   （参考 tomatocat-agent LLMProvider，智谱通过 reasoning_content 返回思考）
-4. 智谱是国内 API → 绕过 HTTP_PROXY 直连（tomatocat 相同策略）
-5. 流式解析 delta.reasoning_content / delta.content
+核心改动（多 Provider 支持）：
+1. AVAILABLE_MODELS 不再硬编码，从 provider_service 动态读取
+2. get_llm() 根据 model_id 从 provider_service 查找对应 Provider 配置
+3. 每个 Provider 可以有独立的 api_key / base_url / temperature / max_tokens
+4. 普通模式 → LangChain ChatOpenAI
+5. 深度思考模式 → AsyncOpenAI + extra_body={"enable_thinking": True}
+6. 智谱等国内 API → 绕过 HTTP_PROXY 直连
+7. 流式解析 delta.reasoning_content / delta.content
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Iterator, Tuple
 from urllib.parse import urlparse
 
-from ..config import API_KEY, BASE_URL, MODEL_ID
+from .provider_service import get_provider_by_model, get_default_provider, list_providers
 
 logger = logging.getLogger(__name__)
 
-# 智谱等国内域名，绕过代理直连（与 tomatocat 保持一致）
+# 智谱等国内域名，绕过代理直连
 _DOMESTIC_HOSTS = {"open.bigmodel.cn", "api.minimax.chat", "dashscope.aliyuncs.com"}
 
-# 可用模型列表
-AVAILABLE_MODELS = [
-    {
-        "id": "glm-4.5-flash",
-        "name": "GLM-4.5-Flash",
-        "provider": "智谱",
-        "default": True,
-        "supports_deep_think": True,
-    },
-    {
-        "id": "glm-4-flash",
-        "name": "GLM-4-Flash",
-        "provider": "智谱",
-        "default": False,
-        "supports_deep_think": False,  # glm-4-flash 不支持深度思考
-    },
-]
-
-_llm_instances = {}  # {model_id: ChatOpenAI 实例}
+_llm_instances = {}  # {cache_key: ChatOpenAI 实例}
 
 
 def _bypass_proxy(base_url: str) -> bool:
@@ -53,41 +35,113 @@ def _bypass_proxy(base_url: str) -> bool:
         return False
 
 
-def _resolve_model(model: str | None) -> str:
-    """解析模型 ID：传入则用传入的，否则用默认配置 MODEL_ID"""
+# ==================================
+# 从 provider_service 动态获取配置
+# ==================================
+def _get_provider_config(model: str | None = None) -> dict:
+    """根据 model_id 查找 Provider 配置，找不到就回退到默认"""
+    if model:
+        p = get_provider_by_model(model)
+        if p:
+            return p
+    p = get_default_provider()
+    if p:
+        return p
+    # 最终兜底（providers.json 为空时）
+    from ..config import API_KEY, BASE_URL, MODEL_ID
+    return {
+        "model_id": MODEL_ID or "glm-4.5-flash",
+        "api_key": API_KEY or "",
+        "base_url": BASE_URL or "https://open.bigmodel.cn/api/paas/v4",
+        "provider": "智谱",
+        "supports_deep_think": True,
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    }
+
+
+def _resolve_model(model: str | None = None) -> str:
+    """解析模型 ID：传入则用传入的，否则用默认 Provider 的 model_id"""
     if model:
         return model
-    return MODEL_ID
+    return _get_provider_config().get("model_id", "glm-4.5-flash")
 
 
 def get_llm(model: str | None = None):
     """普通模式：LangChain ChatOpenAI（不启用思考）"""
-    model_id = _resolve_model(model)
-    if model_id in _llm_instances:
-        return _llm_instances[model_id]
+    cfg = _get_provider_config(model)
+    model_id = cfg["model_id"]
+    cache_key = f"{cfg.get('base_url', '')}:{model_id}"
+
+    if cache_key in _llm_instances:
+        return _llm_instances[cache_key]
 
     from langchain_openai import ChatOpenAI
 
     llm = ChatOpenAI(
         model=model_id,
-        api_key=API_KEY or "placeholder",
-        base_url=BASE_URL,
-        temperature=0.1,
-        max_tokens=4096,
+        api_key=cfg.get("api_key") or "placeholder",
+        base_url=cfg.get("base_url"),
+        temperature=cfg.get("temperature", 0.1),
+        max_tokens=cfg.get("max_tokens", 4096),
         streaming=True,
     )
-    _llm_instances[model_id] = llm
-    logger.info(f"[llm] 普通模式初始化：{model_id} @ {BASE_URL}")
+    _llm_instances[cache_key] = llm
+    logger.info(f"[llm] 普通模式初始化：{model_id} @ {cfg.get('base_url')}")
     return llm
 
 
-def model_supports_deep_think(model: str | None) -> bool:
-    """判断某个模型是否支持深度思考"""
-    model_id = _resolve_model(model)
-    for m in AVAILABLE_MODELS:
-        if m["id"] == model_id:
-            return m.get("supports_deep_think", False)
-    return False
+def model_supports_deep_think(model: str | None = None) -> bool:
+    """判断某个模型是否支持深度思考（从 provider 配置读取）"""
+    cfg = _get_provider_config(model)
+    return cfg.get("supports_deep_think", False)
+
+
+# ==================================
+# 兼容旧接口：动态生成可用模型列表
+# ==================================
+def get_available_models() -> list[dict]:
+    """从 provider_service 动态生成模型列表（兼容 /api/models 端点）"""
+    providers = list_providers(mask_key=False)
+    models = []
+    for p in providers:
+        if not p.get("active", True):
+            continue
+        models.append({
+            "id": p.get("model_id", ""),
+            "name": p.get("name", p.get("model_id", "")),
+            "provider": p.get("provider", ""),
+            "default": p.get("is_default", False),
+            "supports_deep_think": p.get("supports_deep_think", False),
+        })
+    if not models:
+        models.append({
+            "id": "glm-4.5-flash",
+            "name": "GLM-4.5-Flash",
+            "provider": "智谱",
+            "default": True,
+            "supports_deep_think": True,
+        })
+    return models
+
+
+# 向后兼容：AVAILABLE_MODELS 改为动态函数调用
+# chat_router.py 中 [ChatModel(**m) for m in generator_service.AVAILABLE_MODELS]
+# 需要遍历，所以用个 proxy 对象
+class _AvailableModelsProxy:
+    def __iter__(self):
+        return iter(get_available_models())
+    def __getitem__(self, idx):
+        return get_available_models()[idx]
+    def __len__(self):
+        return len(get_available_models())
+    def __repr__(self):
+        return repr(get_available_models())
+    def __bool__(self):
+        return bool(get_available_models())
+
+
+AVAILABLE_MODELS = _AvailableModelsProxy()
 
 
 # ==================================
@@ -100,7 +154,6 @@ def chat(messages: list[dict], enable_deep_think: bool = False, model: str | Non
 
 async def _chat_async(messages: list[dict], enable_deep_think: bool = False, model: str | None = None) -> Tuple[str, str]:
     model_id = _resolve_model(model)
-    # 只有模型支持深度思考时才走深度思考分支
     use_deep_think = enable_deep_think and model_supports_deep_think(model_id)
     if use_deep_think:
         return await _deep_think_non_stream(messages, model=model_id)
@@ -120,7 +173,6 @@ def chat_stream(
 ) -> Iterator[Tuple[str, str]]:
     """
     同步生成器（封装异步的流式调用）。
-
     Yields: (type, token)
       - type='thinking'  思考过程增量
       - type='content'   回答增量
@@ -165,7 +217,6 @@ def _syncify(async_gen, loop):
                 yield ("content", f"❌ {payload}")
             elif kind == "done":
                 break
-        # _drain 已结束，无需 cancel（loop 即将 close）
 
     agen = main()
     while True:
@@ -179,9 +230,7 @@ def _syncify(async_gen, loop):
 # 普通模式：LangChain 流式
 # ==================================
 async def _normal_stream(messages, model: str | None = None) -> Iterator[Tuple[str, str]]:
-    model_id = _resolve_model(model)
-    llm = get_llm(model_id)
-    # LangChain 的 astream 是异步生成器
+    llm = get_llm(model)
     async for chunk in llm.astream(messages):
         token = getattr(chunk, "content", None)
         if token:
@@ -190,18 +239,16 @@ async def _normal_stream(messages, model: str | None = None) -> Iterator[Tuple[s
 
 # ==================================
 # 深度思考：AsyncOpenAI + extra_body={"enable_thinking": True}
-#          （与 tomatocat-agent 完全一致的策略）
 # ==================================
 async def _deep_think_non_stream(messages, model: str | None = None) -> Tuple[str, str]:
-    import openai
-
     model_id = _resolve_model(model)
-    client = _make_async_openai()
+    cfg = _get_provider_config(model_id)
+    client = _make_async_openai(cfg)
     resp = await client.chat.completions.create(
         model=model_id,
         messages=messages,
-        temperature=0.1,
-        max_tokens=4096,
+        temperature=cfg.get("temperature", 0.1),
+        max_tokens=cfg.get("max_tokens", 4096),
         extra_body={"enable_thinking": True},
     )
     msg = resp.choices[0].message
@@ -214,20 +261,17 @@ async def _deep_think_non_stream(messages, model: str | None = None) -> Tuple[st
 
 
 async def _deep_think_stream(messages, model: str | None = None):
-    """
-    流式深度思考（参考 tomatocat LLMProvider._chat_streaming）。
-    - chunk.delta.reasoning_content → thinking token
-    - chunk.delta.content           → content token
-    """
+    """流式深度思考 - chunk.delta.reasoning_content → thinking, delta.content → content"""
     model_id = _resolve_model(model)
-    client = _make_async_openai()
+    cfg = _get_provider_config(model_id)
+    client = _make_async_openai(cfg)
 
     stream = await client.chat.completions.create(
         model=model_id,
         messages=messages,
         stream=True,
-        temperature=0.1,
-        max_tokens=4096,
+        temperature=cfg.get("temperature", 0.1),
+        max_tokens=cfg.get("max_tokens", 4096),
         extra_body={"enable_thinking": True},
         stream_options={"include_usage": False},
     )
@@ -249,25 +293,30 @@ async def _deep_think_stream(messages, model: str | None = None):
             yield ("content", content)
 
 
-def _make_async_openai():
-    """构造 AsyncOpenAI client（国内 API 直连，绕代理）—— 与 tomatocat 一致。"""
+def _make_async_openai(cfg: dict | None = None):
+    """构造 AsyncOpenAI client（国内 API 直连，绕代理）"""
     import httpx
     from openai import AsyncOpenAI
 
+    if cfg is None:
+        cfg = _get_provider_config()
+
+    base_url = cfg.get("base_url", "")
+    api_key = cfg.get("api_key", "")
+
     kwargs = dict(
-        api_key=API_KEY or "placeholder",
+        api_key=api_key or "placeholder",
         timeout=120.0,
         max_retries=2,
     )
-    if BASE_URL:
-        kwargs["base_url"] = BASE_URL
+    if base_url:
+        kwargs["base_url"] = base_url
 
-    if _bypass_proxy(BASE_URL):
-        # 国内 API 直连，显式 proxy=None 绕过环境变量代理
+    if _bypass_proxy(base_url):
         kwargs["http_client"] = httpx.AsyncClient(
             proxy=None,
             timeout=httpx.Timeout(120.0, connect=30.0),
         )
-        logger.info(f"[llm] {BASE_URL} 为国内 API，已绕过代理直连")
+        logger.info(f"[llm] {base_url} 为国内 API，已绕过代理直连")
 
     return AsyncOpenAI(**kwargs)

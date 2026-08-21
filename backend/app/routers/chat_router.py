@@ -23,10 +23,11 @@ def ping():
     return PongResponse()
 
 
-# -------- 可用模型列表 --------
+# -------- 可用模型列表（从 provider_service 动态读取）--------
 @router.get("/models", response_model=list[ChatModel])
 def list_models():
-    return [ChatModel(**m) for m in generator_service.AVAILABLE_MODELS]
+    models = generator_service.get_available_models()
+    return [ChatModel(**m) for m in models]
 
 
 # -------- 非流式（调试用）--------

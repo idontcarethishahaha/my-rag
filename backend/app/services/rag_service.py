@@ -259,6 +259,61 @@ def ask_rag_stream(
             "data": [c.model_dump() for c in chunks],
         }
 
+        # ---- 4.5) 智能体路由：检测输出格式（text/chart/report/data_table）----
+        #  只在 kb_query 路径且有检索结果时做；chat 路径不做
+        from ..agents.base_agent import detect_output_format, OUTPUT_TEXT
+        from ..agents.chart_agent import chart_agent
+        from ..agents.report_agent import report_agent
+        from ..agents.data_agent import data_agent
+
+        _AGENT_REGISTRY = {
+            "chart": chart_agent,
+            "report": report_agent,
+            "data_table": data_agent,
+        }
+
+        output_fmt = OUTPUT_TEXT  # 默认文本
+        try:
+            output_fmt = detect_output_format(question)
+        except Exception as _e_fmt:
+            logger.warning(f"[rag_stream] 输出格式检测失败，回退到 text: {_e_fmt}")
+
+        # 如果不是 text，且有检索结果，就走 agent 生成结构化输出
+        if output_fmt != OUTPUT_TEXT and chunks:
+            logger.info(f"[rag_stream] ✨ 输出格式={output_fmt}，检索 chunks={len(chunks)} 条 → 进入 agent 分支")
+            agent = _AGENT_REGISTRY.get(output_fmt)
+            if agent is None:
+                logger.warning(f"[rag_stream] output_fmt={output_fmt} 没有注册 agent，回退文本")
+            else:
+                try:
+                    context_dicts = _chunks_to_dicts(chunks)
+                    logger.info(f"[rag_stream] 调用 {getattr(agent, 'agent_type', output_fmt)}.execute() 开始")
+                    agent_result = agent.execute(question, context_dicts)
+                    logger.info(
+                        f"[rag_stream] agent 返回：type={agent_result.get('type')}, "
+                        f"content_keys={list(agent_result.get('content', {}).keys())}, "
+                        f"html_len={len((agent_result.get('content', {}).get('html_content', '') or '') if isinstance(agent_result.get('content', {}).get('html_content',''), str) else 0)}"
+                    )
+                    # 通过 SSE 推送 agent 结果
+                    yield {"event": "thinking", "data": None}
+                    yield {"event": "thinking_done", "data": None}
+                    # 先推一段简短文字说明
+                    yield {"event": "token", "data": agent_result["content"].get("text", "") + "\n\n"}
+                    # 推结构化内容
+                    agent_payload = {"type": agent_result["type"], "content": agent_result["content"]}
+                    yield {"event": "agent_output", "data": agent_payload}
+                    logger.info(f"[rag_stream] ✅ agent_output 事件已推送，type={agent_result['type']}")
+                    # 写记忆（只存文字摘要）
+                    memory.append(session_id, question, agent_result["content"].get("text", ""))
+                    yield {"event": "done", "data": {"agent_type": output_fmt}}
+                    return
+                except Exception as _e_agent:
+                    import traceback
+                    logger.warning(
+                        f"[rag_stream] ❌ agent 异常，回退文本: {_e_agent}\n{traceback.format_exc()}"
+                    )
+                    # 继续走下面的文本生成流程
+
         # 组装 Prompt（注入真实文件列表）
         file_list = get_file_list()
         messages = build_rag_messages(

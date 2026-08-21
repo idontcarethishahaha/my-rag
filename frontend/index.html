@@ -412,6 +412,86 @@
     display: flex; align-items: center; gap: 8px;
     padding: 2px 0 10px;
   }
+  /* 置信度 Badge — 回答可信度一眼可见 */
+  .conf-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; font-weight: 600;
+    padding: 2px 10px; border-radius: 999px;
+    margin-bottom: 6px;
+    border: 1px solid transparent;
+  }
+  .conf-badge.high     { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+  .conf-badge.medium   { background: #fefce8; color: #d97706; border-color: #fde68a; }
+  .conf-badge.low      { background: #fff7ed; color: #ea580c; border-color: #fed7aa; }
+  .conf-badge.very_low { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+  .conf-badge .conf-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* 智能体结构化输出（图表 / 报表 / 数据表格） */
+  .agent-output-wrap { margin: 8px 0 4px; }
+  .agent-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px;
+    overflow: hidden;
+  }
+  .agent-chart-canvas { width: 100%; height: 360px; min-height: 320px; }
+  .agent-report-frame {
+    width: 100%;
+    min-height: 280px;
+    border: none;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .agent-table-wrap { overflow-x: auto; margin: 4px 0; }
+  .agent-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .agent-data-table th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+  }
+  .agent-data-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #475569;
+  }
+  .agent-data-table tbody tr:hover { background: #f8fafc; }
+  .agent-insights { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e2e8f0; }
+  .agent-insights-title {
+    font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .agent-insights ul { margin: 0; padding-left: 18px; }
+  .agent-insights li {
+    font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 2px;
+  }
+  /* report 兜底显示（当 LLM 没返回合法 HTML 时用 markdown 渲染） */
+  .agent-report-fallback {
+    min-height: 120px;
+    padding: 12px 16px;
+    background: #fff;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #374151;
+  }
+  .agent-report-fallback h1 { font-size: 22px; color: #8b5cf6; text-align: center; margin: 12px 0 8px; }
+  .agent-report-fallback h2 { font-size: 18px; color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin: 16px 0 8px; }
+  .agent-report-fallback h3 { font-size: 15px; color: #6366f1; margin: 12px 0 4px; }
+  .agent-report-fallback p  { margin: 6px 0; color: #475569; }
+  .agent-report-fallback ul { padding-left: 22px; }
+  .agent-report-fallback li { margin-bottom: 2px; }
   .thinking-dot {
     width: 5px; height: 5px; border-radius: 50%;
     background: #9ca3af; animation: bounce 1.2s infinite;
@@ -927,6 +1007,50 @@
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-thumb { background: #e5e5e5; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: #d4d4d4; }
+
+  /* ============ Provider 管理卡片 ============ */
+  .provider-form {
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .provider-card {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fff;
+    transition: box-shadow .15s, border-color .15s;
+  }
+  .provider-card:hover { border-color: #d1d5db; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .provider-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .provider-name {
+    font-weight: 600; font-size: 13.5px; color: #111827;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .provider-meta {
+    font-size: 11.5px; color: #6b7280;
+    display: flex; align-items: center; gap: 7px;
+    margin-top: 3px;
+    word-break: break-all;
+  }
+  .provider-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: #d4d4d8; }
+  .sidebar-footer {
+    padding: 10px 14px; border-top: 1px solid #f0f0f0;
+  }
+  .sidebar-footer .nav-item { justify-content: flex-start; }
+  .sidebar-footer .badge {
+    margin-left: auto; background: #4ade80; color: #fff;
+    font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  }
+  .sidebar-tip {
+    margin-top: 8px; font-size: 10.5px; color: #b5b8bc; text-align: center;
+  }
 </style>
 </head>
 
@@ -967,6 +1091,11 @@
       </div>
 
       <div class="sidebar-footer" v-show="!sidebarCollapsed">
+        <div class="nav-item" @click="showProviderDrawer = true">
+          <span>⚙️</span>
+          <span>模型设置</span>
+          <span class="badge" v-if="providers.length">{{ providers.length }}</span>
+        </div>
         <div class="sidebar-tip">我是最棒的小羊.jpg</div>
       </div>
     </aside>
@@ -1053,12 +1182,106 @@
                   </div>
                 </div>
 
+                <!-- 置信度 Badge — 紧贴回答上方，一眼看到检索可信度 -->
+                <div
+                  v-if="m.debugInfo && m.debugInfo.retrieval && m.debugInfo.retrieval.confidence_label"
+                  class="conf-badge"
+                  :class="m.debugInfo.retrieval.confidence_label"
+                >
+                  <span class="conf-dot"></span>
+                  <span>{{
+                    {
+                      high: '高置信度',
+                      medium: '中等置信度',
+                      low: '低置信度',
+                      very_low: '置信度很低'
+                    }[m.debugInfo.retrieval.confidence_label] || m.debugInfo.retrieval.confidence_label
+                  }}</span>
+                  <span v-if="m.debugInfo.retrieval.confidence" style="opacity:.7;font-weight:400;">
+                    · {{ (m.debugInfo.retrieval.confidence * 100).toFixed(0) }}%
+                  </span>
+                </div>
+
                 <!-- 回答内容 -->
                 <div
                   v-if="m.content || (!m.thinking && !m.thinking_text)"
                   class="msg-bubble markdown-body"
                   v-html="renderMarkdown(m.content)"
                 ></div>
+
+                <!-- 智能体结构化输出（多智能体路由：图表 / 报表 / 数据表格） -->
+                <div v-if="m.agentOutput" class="agent-output-wrap">
+                  <!-- chart：ECharts 图表 -->
+                  <div v-if="m.agentOutput.type === 'chart' && m.agentOutput.content.chart_spec" class="agent-card agent-chart-card">
+                    <div
+                      v-echart="m.agentOutput.content.chart_spec"
+                      class="agent-chart-canvas"
+                      :key="'chart-' + m._uid"
+                    ></div>
+                  </div>
+
+                  <!-- report：HTML 报表（沙箱化 iframe，避免样式污染）；兜底纯文字显示 -->
+                  <div v-else-if="m.agentOutput.type === 'report'" class="agent-card agent-report-card">
+                    <iframe
+                      v-if="m.agentOutput.content.html_content && _looksLikeHtml(m.agentOutput.content.html_content)"
+                      :key="'report-' + m._uid"
+                      class="agent-report-frame"
+                      :srcdoc="m.agentOutput.content.html_content"
+                      sandbox="allow-same-origin"
+                      referrerpolicy="no-referrer"
+                    ></iframe>
+                    <div v-else class="agent-report-fallback" v-html="renderMarkdown(m.agentOutput.content.html_content || m.agentOutput.content.text || '报表内容为空')"></div>
+                  </div>
+
+                  <!-- data_table：数据表格 + 洞察 + 可选图表 -->
+                  <div v-else-if="m.agentOutput.type === 'data_table'" class="agent-card agent-data-card">
+                    <div v-if="m.agentOutput.content.data_table && m.agentOutput.content.data_table.headers && m.agentOutput.content.data_table.headers.length" class="agent-table-wrap">
+                      <table class="agent-data-table">
+                        <thead>
+                          <tr>
+                            <th v-for="(h, hi) in m.agentOutput.content.data_table.headers" :key="hi">{{ h }}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, ri) in m.agentOutput.content.data_table.rows" :key="ri">
+                            <td v-for="(cell, ci) in row" :key="ci">{{ cell }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <!-- 数据洞察 -->
+                    <div v-if="m.agentOutput.content.insights && m.agentOutput.content.insights.length" class="agent-insights">
+                      <div class="agent-insights-title">数据洞察</div>
+                      <ul>
+                        <li v-for="(insight, ii) in m.agentOutput.content.insights" :key="ii">{{ insight }}</li>
+                      </ul>
+                    </div>
+
+                    <!-- 可选附加图表 -->
+                    <div
+                      v-if="m.agentOutput.content.chart_spec"
+                      v-echart="m.agentOutput.content.chart_spec"
+                      class="agent-chart-canvas"
+                      :key="'data-chart-' + m._uid"
+                    ></div>
+                  </div>
+
+                  <!-- 兜底：agentOutput 存在但三个分支都没命中，显示原始调试视图 -->
+                  <div v-if="m.agentOutput && !(
+                    (m.agentOutput.type === 'chart' && m.agentOutput.content.chart_spec) ||
+                    m.agentOutput.type === 'report' ||
+                    m.agentOutput.type === 'data_table'
+                  )" class="agent-card agent-debug-card">
+                    <div style="font-size:12px;color:#dc2626;font-weight:700;margin-bottom:6px;">⚠️ 结构化内容类型未匹配（debug 视图）</div>
+                    <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">
+                      type = <code style="background:#fef2f2;color:#dc2626;padding:1px 4px;border-radius:4px;">{{ m.agentOutput.type }}</code>
+                      &nbsp;·&nbsp;
+                      keys = [{{ Object.keys(m.agentOutput.content || {}).join(', ') }}]
+                    </div>
+                    <pre style="background:#0f172a;color:#e2e8f0;font-size:11.5px;padding:10px;border-radius:6px;overflow:auto;max-height:220px;margin:0;">{{ JSON.stringify(m.agentOutput, null, 2) }}</pre>
+                  </div>
+                </div>
 
                 <!-- 本条 AI 自己的调试面板（紧跟回答之后，内嵌气泡样式） -->
                 <div v-if="m.debugInfo" class="msg-debug-panel">
@@ -1226,6 +1449,11 @@
                   <span class="model-tag" v-if="m.default">默认</span>
                   <span class="model-tag think" v-if="m.supports_deep_think">✦ 支持思考</span>
                 </div>
+                <!-- 管理 Provider 入口 -->
+                <div class="model-item" style="border-top:1px solid #f0f0f0; margin-top:4px; padding-top:8px; color:#6b7280;" @click="showModelDropdown=false; showProviderDrawer=true">
+                  <span style="font-size:13px;">⚙️</span>
+                  <span class="model-name" style="color:#6b7280;">管理 Provider</span>
+                </div>
               </div>
             </div>
             <button
@@ -1360,6 +1588,116 @@
       </div>
     </div>
   </el-drawer>
+
+  <!-- ============ Provider 管理抽屉 ============ -->
+  <el-drawer
+    v-model="showProviderDrawer"
+    title="LLM Provider 配置"
+    size="520px"
+  >
+    <div class="drawer-body">
+      <!-- 新增/编辑表单 -->
+      <div v-if="showProviderForm" class="provider-form">
+        <div style="margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-weight:600; font-size:14px; color:#111827;">
+            {{ editingProviderId ? '编辑 Provider' : '新增 Provider' }}
+          </span>
+          <el-icon size="16" style="color:#9ca3af; cursor:pointer;" @click="cancelProviderForm">
+            <Close />
+          </el-icon>
+        </div>
+
+        <el-form :model="providerForm" label-width="90px" size="small" style="max-width:100%;">
+          <el-form-item label="显示名称">
+            <el-input v-model="providerForm.name" placeholder="如：智谱 GLM-4.5-Flash" />
+          </el-form-item>
+          <el-form-item label="模型 ID">
+            <el-input v-model="providerForm.model_id" placeholder="如：glm-4.5-flash" />
+          </el-form-item>
+          <el-form-item label="API Key">
+            <el-input v-model="providerForm.api_key" placeholder="输入 API Key（编辑时留空=不改）" type="password" show-password />
+          </el-form-item>
+          <el-form-item label="Base URL">
+            <el-input v-model="providerForm.base_url" placeholder="如：https://open.bigmodel.cn/api/paas/v4" />
+          </el-form-item>
+          <el-form-item label="厂商">
+            <el-input v-model="providerForm.provider" placeholder="如：智谱 / 通义 / SiliconFlow" />
+          </el-form-item>
+          <el-form-item label="温度">
+            <el-input-number v-model="providerForm.temperature" :min="0" :max="2" :step="0.1" :precision="1" size="small" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="Max Tokens">
+            <el-input-number v-model="providerForm.max_tokens" :min="256" :max="32768" :step="256" size="small" style="width:100%;" />
+          </el-form-item>
+          <el-form-item label="选项">
+            <el-checkbox v-model="providerForm.supports_deep_think">支持深度思考</el-checkbox>
+            <el-checkbox v-model="providerForm.is_default">设为默认</el-checkbox>
+            <el-checkbox v-model="providerForm.active">启用</el-checkbox>
+          </el-form-item>
+        </el-form>
+
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <el-button type="primary" size="small" @click="saveProvider" :loading="savingProvider">
+            {{ editingProviderId ? '保存修改' : '创建' }}
+          </el-button>
+          <el-button size="small" @click="cancelProviderForm">取消</el-button>
+        </div>
+      </div>
+
+      <!-- Provider 列表 -->
+      <div v-else>
+        <el-button type="primary" size="small" @click="openProviderForm()" style="width:100%; margin-bottom:14px;">
+          + 新增 Provider
+        </el-button>
+
+        <div v-loading="loadingProviders">
+          <div v-if="providers.length === 0 && !loadingProviders" class="empty-files">
+            <div class="empty-icon">⚙️</div>
+            <div>暂无 Provider，点击上方按钮新增</div>
+          </div>
+
+          <div
+            v-for="p in providers"
+            :key="p.id"
+            class="provider-card"
+          >
+            <div class="provider-header">
+              <div class="provider-name">
+                {{ p.name }}
+                <el-tag v-if="p.is_default" type="success" size="small" effect="plain" style="margin-left:4px;">默认</el-tag>
+                <el-tag v-if="!p.active" type="info" size="small" effect="plain" style="margin-left:4px;">已禁用</el-tag>
+              </div>
+              <el-dropdown trigger="click" @command="(cmd) => handleProviderAction(cmd, p)">
+                <el-icon size="14" style="color:#9ca3af; cursor:pointer;"><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                    <el-dropdown-item command="default" :disabled="p.is_default">设为默认</el-dropdown-item>
+                    <el-dropdown-item command="test">测试连接</el-dropdown-item>
+                    <el-dropdown-item command="toggle">{{ p.active ? '禁用' : '启用' }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided style="color:#ef4444;">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <div class="provider-meta">
+              <span>模型：{{ p.model_id }}</span>
+              <span class="dot"></span>
+              <span>厂商：{{ p.provider || '未指定' }}</span>
+            </div>
+            <div class="provider-meta">
+              <span>Base URL：{{ p.base_url }}</span>
+            </div>
+            <div class="provider-meta">
+              <span>API Key：{{ p.api_key || '未设置' }}</span>
+              <span class="dot"></span>
+              <span v-if="p.supports_deep_think" style="color:#4f46e5;">✦ 支持思考</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </el-drawer>
 </div>
 
 <script>
@@ -1368,6 +1706,40 @@ const { createApp, ref, computed, nextTick, onMounted, reactive, watch } = Vue;
 const md = window.markdownit({
   html: false, breaks: true, linkify: true, typographer: true,
 });
+
+// ==================================
+// ECharts 按需加载（多智能体路由产生的图表用）
+// ==================================
+let _echartsLoaded = false;
+let _echartsLoadingPromise = null;
+function _ensureEcharts() {
+  if (_echartsLoaded) return Promise.resolve(window.echarts);
+  if (_echartsLoadingPromise) return _echartsLoadingPromise;
+  _echartsLoadingPromise = new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js';
+    s.onload = () => { _echartsLoaded = true; resolve(window.echarts); };
+    s.onerror = () => { console.warn('[ECharts] CDN 加载失败'); resolve(null); };
+    document.head.appendChild(s);
+  });
+  return _echartsLoadingPromise;
+}
+
+// 渲染 ECharts 图表到指定 DOM 元素
+function _renderChart(elId, spec) {
+  _ensureEcharts().then((echarts) => {
+    if (!echarts) return;
+    const el = document.getElementById(elId);
+    if (!el) return;
+    try {
+      const chart = echarts.init(el);
+      chart.setOption(spec);
+      // 响应式
+      const ro = new ResizeObserver(() => chart.resize());
+      ro.observe(el);
+    } catch (e) { console.error('[ECharts] 渲染失败', e); }
+  });
+}
 
 const app = createApp({
   setup() {
@@ -1442,6 +1814,196 @@ const app = createApp({
           { id: 'glm-4.5-flash', name: 'GLM-4.5-Flash', provider: '智谱', default: true, supports_deep_think: true },
           { id: 'glm-4-flash',   name: 'GLM-4-Flash',   provider: '智谱', default: false, supports_deep_think: false },
         ];
+      }
+    }
+
+    // ========== Provider 管理 ==========
+    const showProviderDrawer = ref(false);
+    const providers = ref([]);
+    const loadingProviders = ref(false);
+    const showProviderForm = ref(false);
+    const editingProviderId = ref(null);
+    const savingProvider = ref(false);
+    const providerForm = reactive({
+      name: '', model_id: '', api_key: '', base_url: '',
+      provider: '', temperature: 0.1, max_tokens: 4096,
+      supports_deep_think: false, is_default: false, active: true,
+    });
+    // 测试中的 provider id -> 用于按钮 loading
+    const testingProviderId = ref('');
+
+    function _resetProviderForm() {
+      editingProviderId.value = null;
+      Object.assign(providerForm, {
+        name: '', model_id: '', api_key: '', base_url: '',
+        provider: '', temperature: 0.1, max_tokens: 4096,
+        supports_deep_think: false, is_default: false, active: true,
+      });
+    }
+
+    async function loadProviders() {
+      loadingProviders.value = true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/providers`);
+        if (resp.ok) providers.value = await resp.json();
+      } catch (e) {
+        ElementPlus.ElMessage.error('加载 Provider 失败：' + e.message);
+      } finally {
+        loadingProviders.value = false;
+      }
+    }
+
+    // 抽屉打开时自动拉取一次
+    watch(showProviderDrawer, (val) => {
+      if (val) loadProviders();
+    });
+
+    function openProviderForm(p) {
+      _resetProviderForm();
+      if (p) {
+        editingProviderId.value = p.id;
+        Object.assign(providerForm, {
+          name: p.name || '', model_id: p.model_id || '',
+          // 编辑时 api_key 留空 = 不改
+          api_key: '', base_url: p.base_url || '',
+          provider: p.provider || '',
+          temperature: p.temperature ?? 0.1,
+          max_tokens: p.max_tokens ?? 4096,
+          supports_deep_think: !!p.supports_deep_think,
+          is_default: !!p.is_default, active: p.active !== false,
+        });
+      }
+      showProviderForm.value = true;
+    }
+
+    function cancelProviderForm() {
+      showProviderForm.value = false;
+      _resetProviderForm();
+    }
+
+    async function saveProvider() {
+      // 基础校验
+      if (!providerForm.name.trim()) {
+        ElementPlus.ElMessage.warning('请填写显示名称');
+        return;
+      }
+      if (!providerForm.model_id.trim()) {
+        ElementPlus.ElMessage.warning('请填写模型 ID');
+        return;
+      }
+      if (!providerForm.base_url.trim()) {
+        ElementPlus.ElMessage.warning('请填写 Base URL');
+        return;
+      }
+      savingProvider.value = true;
+      try {
+        const isEdit = !!editingProviderId.value;
+        const payload = { ...providerForm };
+        // 编辑模式下 api_key 留空 → 不传该字段（后端 exclude_none 会跳过 → 保留原值）
+        if (isEdit && !payload.api_key) delete payload.api_key;
+
+        const url = isEdit
+          ? `${API_BASE}/api/providers/${editingProviderId.value}`
+          : `${API_BASE}/api/providers`;
+        const method = isEdit ? 'PUT' : 'POST';
+        const resp = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${txt}`);
+        }
+        ElementPlus.ElMessage.success(isEdit ? 'Provider 已更新' : 'Provider 已创建');
+        cancelProviderForm();
+        await loadProviders();
+        // Provider 变了，可用模型列表也要刷新
+        await loadModels();
+      } catch (e) {
+        ElementPlus.ElMessage.error('保存失败：' + e.message);
+      } finally {
+        savingProvider.value = false;
+      }
+    }
+
+    async function handleProviderAction(cmd, p) {
+      if (cmd === 'edit') {
+        openProviderForm(p);
+      } else if (cmd === 'default') {
+        await setDefaultProvider(p);
+      } else if (cmd === 'test') {
+        await testProvider(p);
+      } else if (cmd === 'toggle') {
+        await toggleProvider(p);
+      } else if (cmd === 'delete') {
+        await deleteProvider(p);
+      }
+    }
+
+    async function setDefaultProvider(p) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/providers/${p.id}/default`, { method: 'PUT' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        ElementPlus.ElMessage.success(`已设为默认：${p.name}`);
+        await loadProviders();
+        await loadModels();
+      } catch (e) {
+        ElementPlus.ElMessage.error('设置失败：' + e.message);
+      }
+    }
+
+    async function testProvider(p) {
+      testingProviderId.value = p.id;
+      try {
+        const resp = await fetch(`${API_BASE}/api/providers/${p.id}/test`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+          ElementPlus.ElMessage.success(`连接成功${data.reply ? '：' + data.reply : ''}`);
+        } else {
+          ElementPlus.ElMessage.error('连接失败：' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        ElementPlus.ElMessage.error('测试失败：' + e.message);
+      } finally {
+        testingProviderId.value = '';
+      }
+    }
+
+    async function toggleProvider(p) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/providers/${p.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: !p.active }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        ElementPlus.ElMessage.success(p.active ? '已禁用' : '已启用');
+        await loadProviders();
+        await loadModels();
+      } catch (e) {
+        ElementPlus.ElMessage.error('操作失败：' + e.message);
+      }
+    }
+
+    async function deleteProvider(p) {
+      try {
+        await ElementPlus.ElMessageBox.confirm(
+          `确定删除 Provider「${p.name}」吗？此操作不可恢复。`,
+          '删除确认',
+          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+        );
+      } catch {
+        return; // 用户取消
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/api/providers/${p.id}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        ElementPlus.ElMessage.success('已删除');
+        await loadProviders();
+        await loadModels();
+      } catch (e) {
+        ElementPlus.ElMessage.error('删除失败：' + e.message);
       }
     }
 
@@ -1573,6 +2135,15 @@ const app = createApp({
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+    // 检测一段字符串看起来像不像 HTML（用于 report iframe 判定）
+    function _looksLikeHtml(s) {
+      if (!s || typeof s !== 'string') return false;
+      const t = s.trim();
+      if (t.length < 20) return false;
+      const hasOpen = /<\s*[a-zA-Z][\w-]*(\s[^>]*)?>/.test(t);
+      const hasClose = /<\/\s*[a-zA-Z][\w-]*\s*>/.test(t);
+      return hasOpen && hasClose;
+    }
 
     // ========== localStorage 兜底 ==========
     const LS_KEY_ACTIVE = 'myrag_active_session_id';
@@ -1582,6 +2153,7 @@ const app = createApp({
         _uid: m._uid, role: m.role, content: m.content, thinking_text: m.thinking_text || '',
         _thinkingOpen: m._thinkingOpen, _thinkingMs: m._thinkingMs || 0,
         sources: m.sources || [], debugInfo: m.debugInfo || null,
+        agentOutput: m.agentOutput || null,
       })))); } catch {}
     }
     function loadMessagesFromCache(sid) {
@@ -1596,6 +2168,7 @@ const app = createApp({
           _thinkingOpen: m._thinkingOpen !== undefined ? m._thinkingOpen : false,
           _thinkingMs: m._thinkingMs || 0,
           sources: m.sources || [], debugInfo: m.debugInfo || null,
+          agentOutput: m.agentOutput || null,
         }));
       } catch { return null; }
     }
@@ -1725,6 +2298,7 @@ const app = createApp({
         _thinkingMs: 0,
         sources: [],                // 本条 AI 回答的引用来源（独立持有，不被后续消息覆盖）
         debugInfo: null,            // 本条 AI 回答的调试信息（独立持有）
+        agentOutput: null,          // 多智能体路由产生的结构化输出（chart/report/data_table）
       });
       messages.value.push(aiMsg);
       lastSources.value = [];
@@ -1814,6 +2388,34 @@ const app = createApp({
             if (event === 'token') {
               aiMsg.thinking = false;
               aiMsg.content += data || '';
+              scrollToBottom(false);
+            }
+
+            // 智能体结构化输出（图表/报表/数据表格）
+            if (event === 'agent_output') {
+              aiMsg.thinking = false;
+              aiMsg.agentOutput = data || null;
+              console.log('%c[agent_output] 收到智能体结构化输出', 'color:#8b5cf6; font-weight:700;', {
+                type: data && data.type,
+                contentKeys: data && data.content ? Object.keys(data.content) : [],
+                contentPreview: (() => {
+                  const c = data && data.content;
+                  if (!c) return null;
+                  const p = {};
+                  if (c.text) p.text = c.text.slice(0, 80);
+                  if (c.html_content) p.html_len = c.html_content.length + ', html_looksLike=' + _looksLikeHtml(c.html_content);
+                  if (c.chart_spec) p.has_chart = true;
+                  if (c.data_table) p.table_shape = (c.data_table.headers || []).length + '列 × ' + (c.data_table.rows || []).length + '行';
+                  if (c.insights) p.insights_count = (c.insights || []).length;
+                  return p;
+                })(),
+                raw: data,
+              });
+              // 加载 ECharts（按需，只在有 chart_spec 时）
+              if (data && data.content && data.content.chart_spec) {
+                _ensureEcharts();
+              }
+              saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom(false);
             }
 
@@ -1979,6 +2581,8 @@ const app = createApp({
       await loadConversations();
       await loadChunkMethods();
       await loadIndexedFiles();
+      // 启动时拉一次 Provider（用于侧边栏 badge 显示数量）
+      loadProviders();
       document.addEventListener('click', onDocClick);
     });
 
@@ -1993,15 +2597,58 @@ const app = createApp({
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,
       chunkMethods, executeChunk, getChunkMethodLabel,
-      getFileIconClass, getFileIconText, formatSize,
+      getFileIconClass, getFileIconText, formatSize, _looksLikeHtml,
       toggleThinking, formatThinkingTime,
       // 模型选择
       availableModels, selectedModelId, showModelDropdown,
       currentModel, toggleModelDropdown, selectModel,
       // 侧边栏
       sidebarCollapsed, toggleSidebar,
+      // Provider 管理
+      showProviderDrawer, providers, loadingProviders,
+      showProviderForm, editingProviderId, providerForm, savingProvider,
+      testingProviderId,
+      loadProviders, openProviderForm, cancelProviderForm, saveProvider,
+      handleProviderAction, setDefaultProvider, testProvider,
+      toggleProvider, deleteProvider,
     };
   }
+});
+
+// 自定义指令 v-echart：绑定时把 spec 渲染成 ECharts 图表到当前元素
+// 用法：<div v-echart="spec" style="width:100%;height:360px;"></div>
+app.directive('echart', {
+  mounted(el, binding) {
+    if (!binding.value) return;
+    _ensureEcharts().then((echarts) => {
+      if (!echarts) {
+        el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">图表库加载失败，请检查网络</div>';
+        return;
+      }
+      try {
+        const chart = echarts.init(el);
+        chart.setOption(binding.value);
+        const ro = new ResizeObserver(() => chart.resize());
+        ro.observe(el);
+        // 记录到 DOM 上，方便后续 setOption 更新
+        el._echartsInstance = chart;
+      } catch (e) {
+        console.error('[v-echart] 渲染失败', e);
+        el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">图表渲染失败</div>';
+      }
+    });
+  },
+  updated(el, binding) {
+    if (el._echartsInstance && binding.value) {
+      try { el._echartsInstance.setOption(binding.value); } catch (e) { /* ignore */ }
+    }
+  },
+  beforeUnmount(el) {
+    if (el._echartsInstance) {
+      try { el._echartsInstance.dispose(); } catch (e) { /* ignore */ }
+      el._echartsInstance = null;
+    }
+  },
 });
 
 for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
