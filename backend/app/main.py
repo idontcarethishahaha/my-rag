@@ -7,15 +7,30 @@ my-rag — 完整 RAG 系统 后端入口
 """
 from __future__ import annotations
 
+import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from .config import VECTOR_DB_TYPE, MODEL_ID
+from .config import VECTOR_DB_TYPE, MODEL_ID, UPLOAD_DIR
 from .routers.index_router import router as index_router
 from .routers.chat_router import router as chat_router
 from .routers.provider_router import router as provider_router
+
+# ============ 日志配置：确保 INFO 级别日志输出 ============
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+# 降低第三方库日志级别，避免过于嘈杂
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -65,6 +80,16 @@ app.add_middleware(
 app.include_router(index_router)
 app.include_router(chat_router)
 app.include_router(provider_router)
+
+# 静态文件服务：上传目录（图片预览用）
+_upload_path = Path(UPLOAD_DIR).resolve()
+_upload_path.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_upload_path)), name="uploads")
+
+# 前端静态文件服务（index.html）
+_frontend_path = Path(__file__).resolve().parent.parent.parent / "frontend"
+if _frontend_path.exists():
+    app.mount("/", StaticFiles(directory=str(_frontend_path), html=True), name="frontend")
 
 
 @app.get("/", tags=["根"])

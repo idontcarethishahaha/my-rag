@@ -28,5 +28,20 @@
     "max_tokens": 4096,
     "created_at": "2026-08-21 11:51:04",
     "updated_at": "2026-08-21 11:51:04"
+  },
+  {
+    "id": "732e68075531",
+    "name": "智谱 GLM-4.6v-Flash",
+    "model_id": "glm-4.6v-flash",
+    "api_key": "323ca7ec36f74fe8974f6c89b0d8ba3d.gFp2cFuAXke5ifib",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "provider": "智谱",
+    "is_default": false,
+    "active": true,
+    "supports_deep_think": false,
+    "temperature": 0.1,
+    "max_tokens": 4096,
+    "created_at": "2026-08-21 17:34:51",
+    "updated_at": "2026-08-21 17:34:51"
   }
 ]

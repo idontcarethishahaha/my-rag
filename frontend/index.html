@@ -767,6 +767,13 @@
     border-color: #d1d5db;
     background: #fafafa;
   }
+  .model-select.vl-mode {
+    border-color: #16a34a;
+    background: #f0fdf4;
+  }
+  .model-select.vl-mode .dot {
+    background: #16a34a;
+  }
   .model-select .sparkle {
     color: #22c55e;
     font-weight: 600;
@@ -871,8 +878,10 @@
     background: #ffffff;
     border: 1px solid #e5e7eb;
     border-radius: 22px;
-    padding: 10px 10px 10px 18px;
-    display: flex; align-items: flex-end; gap: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     box-shadow:
       0 10px 40px -10px rgba(0,0,0,0.10),
       0 2px 8px -3px rgba(0,0,0,0.05);
@@ -884,15 +893,47 @@
       0 12px 48px -12px rgba(0,0,0,0.14),
       0 2px 8px -3px rgba(0,0,0,0.05);
   }
+  .input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
   .input-wrapper textarea {
-    flex: 1; border: none; outline: none; resize: none;
-    font-family: inherit; font-size: 14.5px; line-height: 1.6;
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    font-size: 14.5px;
+    line-height: 1.6;
     background: transparent;
-    max-height: 180px; min-height: 24px;
-    padding: 4px 0;
+    max-height: 180px;
+    min-height: 24px;
+    padding: 6px 0 4px;
     color: #111827;
+    min-width: 0;
   }
   .input-wrapper textarea::placeholder { color: #9ca3af; }
+
+  /* 图片按钮：灰色圆角方形 */
+  .picture-btn {
+    background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+    color: #4b5563 !important;
+    width: 36px !important; height: 36px !important;
+    min-width: 36px !important;
+    border-radius: 11px !important;
+    padding: 0 !important;
+    transition: all .15s !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .picture-btn:hover:not(:disabled) {
+    background: #e5e7eb !important;
+    transform: translateY(-1px);
+  }
+  .picture-btn:disabled { opacity: .4; cursor: not-allowed; }
 
   /* 发送按钮：绿色深圆角方形 */
   .send-btn {
@@ -910,6 +951,93 @@
     transform: translateY(-1px);
   }
   .send-btn:disabled { opacity: .4; }
+
+  /* 图片预览区 */
+  .img-preview-list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 4px;
+    border-bottom: 1px dashed #e5e7eb;
+    margin-bottom: 4px;
+  }
+  .img-preview-item {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+  .img-preview-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .img-preview-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 700;
+    transition: background .15s;
+  }
+  .img-preview-remove:hover { background: #ef4444; }
+  .img-preview-count {
+    margin-left: auto;
+    color: #6b7280;
+    font-size: 11px;
+  }
+
+  /* VL 模式提示 */
+  .vl-mode-hint {
+    color: #16a34a;
+    font-weight: 500;
+  }
+
+  /* 用户消息中的图片渲染 */
+  .user-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .user-images img,
+  .user-images-inline img {
+    max-width: 180px;
+    max-height: 180px;
+    border-radius: 10px;
+    cursor: pointer;
+    object-fit: cover;
+    border: 1px solid #e5e7eb;
+    display: block;
+  }
+  .user-images img:hover,
+  .user-images-inline img:hover {
+    border-color: #16a34a;
+  }
+  .user-images-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .msg-text {
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
 
   .input-tips {
     text-align: center;
@@ -1145,12 +1273,12 @@
 
         <!-- 消息列表（messages 非空时显示）-->
         <div v-else class="msg-wrap">
-          <div
-            v-for="(m, idx) in messages"
-            :key="m._uid || ('fallback_' + idx)"
-            class="msg-row"
-            :class="m.role"
-          >
+          <template v-for="(m, idx) in messages" :key="m._uid || ('fallback_' + idx)">
+            <div
+              v-if="!isEmptyMessage(m)"
+              class="msg-row"
+              :class="m.role"
+            >
             <div class="avatar" :class="m.role">
               <span v-if="m.role === 'ai'">🍅</span>
               <span v-else>U</span>
@@ -1413,9 +1541,28 @@
                 </div>
               </template>
               <!-- 用户消息 -->
-              <div v-else class="msg-bubble">{{ m.content }}</div>
+              <template v-else>
+                <div class="msg-bubble">
+                  <!-- 图片：放在气泡内部，文字之前 -->
+                  <div v-if="m.images && m.images.length" class="user-images-inline">
+                    <img
+                      v-for="(imgUrl, imgIdx) in m.images"
+                      :key="imgIdx"
+                      :src="imgUrl.startsWith('/') ? API_BASE + imgUrl : imgUrl"
+                      @click="previewImage(imgUrl)"
+                    />
+                  </div>
+                  <!-- 文字：纯图片(m.content 为空或"[图片]")时不显示占位文字 -->
+                  <div
+                    v-if="m.content && m.content !== '[图片]'"
+                    class="msg-text"
+                    v-html="renderMarkdown(m.content)"
+                  ></div>
+                </div>
+              </template>
             </div>
           </div>
+          </template>
         </div>
       </div>
 
@@ -1434,7 +1581,7 @@
           <div class="input-toolbar">
             <!-- 模型选择（✦ + 绿点 + 下拉）-->
             <div class="model-select-wrap">
-              <div class="model-select" @click.stop="toggleModelDropdown">
+              <div class="model-select" :class="{ 'vl-mode': isImageMode }" @click.stop="toggleModelDropdown">
                 <span class="sparkle">✦</span>
                 <span class="dot"></span>
                 <span class="model-name">{{ currentModel.name }}</span>
@@ -1477,26 +1624,55 @@
           </div>
 
           <div class="input-wrapper">
-            <textarea
-              v-model="inputText"
-              placeholder="给 MyRag AI 发送消息"
-              :disabled="isStreaming"
-              @keydown="onKeydown"
-              rows="1"
-              ref="textareaRef"
-              @input="autoResize"
-            ></textarea>
-            <el-button
-              class="send-btn"
-              :disabled="!inputText.trim() || isStreaming"
-              circle
-              @click="send"
-            >
-              <el-icon :size="15"><Top /></el-icon>
-            </el-button>
+            <!-- 图片预览区（有图片时显示，在 textarea 上方作为缩略图条）-->
+            <div v-if="pendingImages.length > 0" class="img-preview-list">
+              <div v-for="(img, idx) in pendingImages" :key="idx" class="img-preview-item">
+                <img :src="img.url" :alt="'preview-' + idx" />
+                <div class="img-preview-remove" @click="removeImage(idx)">✕</div>
+              </div>
+              <span class="img-preview-count">已选 {{ pendingImages.length }} 张</span>
+            </div>
+            <!-- 主输入行：图片按钮(左) + textarea(中) + 发送按钮(右) -->
+            <div class="input-row">
+              <input
+                type="file"
+                ref="fileInputRef"
+                accept="image/jpeg,image/png,image/webp,image/tiff,image/bmp"
+                multiple
+                style="display:none"
+                @change="onImageSelect"
+              />
+              <el-button
+                class="picture-btn"
+                :disabled="isStreaming"
+                circle
+                @click="$refs.fileInputRef.click()"
+                title="上传图片"
+              >
+                <el-icon :size="16"><Picture /></el-icon>
+              </el-button>
+              <textarea
+                v-model="inputText"
+                placeholder="给 MyRag AI 发送消息…"
+                :disabled="isStreaming"
+                @keydown="onKeydown"
+                rows="1"
+                ref="textareaRef"
+                @input="autoResize"
+              ></textarea>
+              <el-button
+                class="send-btn"
+                :disabled="(!inputText.trim() && pendingImages.length === 0) || isStreaming"
+                circle
+                @click="send"
+              >
+                <el-icon :size="15"><Top /></el-icon>
+              </el-button>
+            </div>
           </div>
           <p class="input-tips">
-            内容由 AI 生成，请注意甄别 · Enter 发送，Shift + Enter 换行
+            内容由 AI 生成，请注意甄别 · Enter 发送，Shift + Enter 换行 · 支持 🖼️ 图片识别
+            <span v-if="isImageMode" class="vl-mode-hint">· 已切换 {{ vlConfig.model }} 视觉模型</span>
           </p>
         </div>
       </div>
@@ -1766,6 +1942,28 @@ const app = createApp({
     let _msgUidCounter = 0;
     const _nextMsgUid = () => ('m_' + (++_msgUidCounter) + '_' + Date.now().toString(36));
 
+    // 判断消息是否"全空"（无文字、无图片、无引用、无 agent 输出、无调试信息、无思考中状态）
+    // —— 用于过滤旧历史数据中失败/中断导致的空消息气泡（空气泡）
+    // 注意：Vue 模板中暴露的函数不能以下划线开头，会被 Vue 内部命名空间拦截
+    function isEmptyMessage(m) {
+      if (!m) return true;
+      // 有内容（且不是纯占位符）
+      const hasContent = !!(m.content && String(m.content).trim() !== '' && String(m.content).trim() !== '[图片]');
+      // 有图片
+      const hasImages = !!(m.images && m.images.length);
+      // AI 相关：有思考 / 有 sources / 有 agentOutput / 有 debugInfo / 思考中
+      const hasAiStuff = !!(
+        (m.role === 'ai') && (
+          (m.thinking_text && m.thinking_text.trim()) ||
+          m.thinking ||
+          (m.sources && m.sources.length) ||
+          m.agentOutput ||
+          m.debugInfo
+        )
+      );
+      return !(hasContent || hasImages || hasAiStuff);
+    }
+
     // ========== 状态 ==========
     const activeSessionId = ref('');
     const conversations = ref([]);
@@ -1774,6 +1972,12 @@ const app = createApp({
     const isStreaming = ref(false);
     const lastSources = ref([]);
     const lastDebugInfo = ref(null);
+    // 追踪流式请求开始时间，用于检测卡住的状态
+    let _streamStartAt = 0;
+    const STREAM_TIMEOUT_MS = 300_000; // 5 分钟超时保护
+    // 图片上传相关
+    const pendingImages = ref([]);  // [{file, url}] 待发送的图片
+    const fileInputRef = ref(null);
     // 从 localStorage 恢复深度思考状态
     const enableDeepThink = ref(localStorage.getItem('myrag_deep_think') === 'true');
     // 状态变化时保存到 localStorage
@@ -1785,8 +1989,14 @@ const app = createApp({
     const availableModels = ref([]);
     const selectedModelId = ref(localStorage.getItem('myrag_selected_model') || 'glm-4.5-flash');
     const showModelDropdown = ref(false);
+    const vlConfig = ref({ enabled: true, model: 'glm-4.1v-thinking-flash', display_name: '视觉模型' });
+    const isImageMode = computed(() => pendingImages.value.length > 0);
 
     const currentModel = computed(() => {
+      // 图片模式下显示视觉模型
+      if (isImageMode.value && vlConfig.value.enabled) {
+        return { id: vlConfig.value.model, name: vlConfig.value.display_name, provider: '多模态', supports_deep_think: true };
+      }
       const m = availableModels.value.find(x => x.id === selectedModelId.value);
       return m || (availableModels.value[0] || { id: 'glm-4.5-flash', name: 'GLM-4.5-Flash', provider: '智谱', default: true, supports_deep_think: true });
     });
@@ -1832,6 +2042,13 @@ const app = createApp({
           { id: 'glm-4-flash',   name: 'GLM-4-Flash',   provider: '智谱', default: false, supports_deep_think: false },
         ];
       }
+      // 加载 VL 配置
+      try {
+        const vlResp = await fetch(`${API_BASE}/api/vl-config`);
+        if (vlResp.ok) {
+          vlConfig.value = await vlResp.json();
+        }
+      } catch (e) { /* 使用默认值 */ }
     }
 
     // ========== Provider 管理 ==========
@@ -2241,6 +2458,27 @@ const app = createApp({
                 agentOutput = cachedMsg.agentOutput;
               }
 
+              // 恢复用户图片：优先用后端直接返回的 images 字段（新版多模态格式），兼容老的 metadata.image_urls
+              let images = [];
+              if (sm.role === 'user') {
+                if (Array.isArray(sm.images) && sm.images.length) {
+                  images = sm.images.map(url => {
+                    if (typeof url !== 'string') return '';
+                    if (url.startsWith('http')) return url;
+                    if (url.startsWith('/')) return API_BASE + url;
+                    return API_BASE + '/' + url;
+                  }).filter(Boolean);
+                } else if (sm.metadata && Array.isArray(sm.metadata.image_urls) && sm.metadata.image_urls.length) {
+                  images = sm.metadata.image_urls.map(url => {
+                    if (typeof url !== 'string') return '';
+                    if (url.startsWith('http')) return url;
+                    return API_BASE + url;
+                  }).filter(Boolean);
+                } else if (cachedMsg && cachedMsg.images) {
+                  images = cachedMsg.images;
+                }
+              }
+
               merged.push(reactive({
                 _uid: uid,
                 role: role,
@@ -2250,9 +2488,14 @@ const app = createApp({
                 _thinkingOpen: (cachedMsg && cachedMsg._thinkingOpen) || false,
                 _thinkingMs: (cachedMsg && cachedMsg._thinkingMs) || 0,
                 agentOutput: agentOutput,
+                images: images,
+                sources: (cachedMsg && cachedMsg.sources) ? cachedMsg.sources :
+                         (sm.metadata && sm.metadata.sources ? sm.metadata.sources : null),
+                debugInfo: (cachedMsg && cachedMsg.debugInfo) || null,
               }));
             }
-            messages.value = merged;
+            // —— 额外过滤：去掉历史中因请求中断残留的"全空消息"（空气泡 + 独立番茄/U 头像）
+            messages.value = merged.filter(m => !isEmptyMessage(m));
             saveMessagesToCache(sid, messages.value);
           }
         }
@@ -2305,62 +2548,154 @@ const app = createApp({
 
     async function send() {
       const q = inputText.value.trim();
-      if (!q || isStreaming.value) return;
+      const hasImages = pendingImages.value.length > 0;
+      console.log('%c[send] 入口', 'color:#16a34a;font-weight:700;',
+        { q: q.slice(0, 40), hasImages, pendingCount: pendingImages.value.length,
+          isStreaming: isStreaming.value, activeSessionId: activeSessionId.value });
+
+      // 检测并恢复卡住的 isStreaming 状态
+      if (isStreaming.value) {
+        const elapsed = Date.now() - _streamStartAt;
+        if (_streamStartAt > 0 && elapsed > STREAM_TIMEOUT_MS) {
+          console.warn(`[send] 检测到 isStreaming 已卡住 ${Math.round(elapsed/1000)}s，强制重置`);
+          isStreaming.value = false;
+          _streamStartAt = 0;
+          // 修复可能的残留 AI 消息
+          const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai' && !m._finalized);
+          if (lastAiMsg) {
+            lastAiMsg.thinking = false;
+            lastAiMsg.content = lastAiMsg.content || '（请求超时，已自动恢复。请重试）';
+            lastAiMsg._finalized = true;
+          }
+        } else if (_streamStartAt > 0) {
+          // 正在流且未超时，正常阻止
+          console.log(`[send] 正在流式响应中（${Math.round(elapsed/1000)}s），跳过发送`);
+          return;
+        } else {
+          // isStreaming 为 true 但没有开始时间（异常状态），直接重置
+          console.warn('[send] isStreaming=true 但无开始时间，强制重置');
+          isStreaming.value = false;
+        }
+      }
+
+      if ((!q && !hasImages)) {
+        console.log('[send] 提前返回（空内容）');
+        return;
+      }
       if (!activeSessionId.value) await newConversation();
 
       const conv = activeConversation.value;
       if (conv && conv.title === '新对话') {
-        conv.title = q.slice(0, 20) + (q.length > 20 ? '…' : '');
+        conv.title = (q || '图片').slice(0, 20) + ((q || '图片').length > 20 ? '…' : '');
       }
 
-      messages.value.push(reactive({ _uid: _nextMsgUid(), role: 'user', content: q }));
+      // 构建用户消息（含图片预览 URL）
+      const userImgUrls = hasImages
+        ? pendingImages.value.map(img => img.url)
+        : [];
+      console.log('[send] 用户图片预览 URL:', userImgUrls);
+      messages.value.push(reactive({
+        _uid: _nextMsgUid(),
+        role: 'user',
+        content: q || '',
+        images: userImgUrls,  // 本地预览 URL（blob:/… 或 /uploads/…）
+      }));
+
       const aiMsg = reactive({
         _uid: _nextMsgUid(),
         role: 'ai',
         content: '',
-        thinking: true,            // loading 思考中
-        thinking_text: '',          // 思考过程文本
-        _thinkingOpen: enableDeepThink.value, // 深度思考模式下默认展开
+        thinking: true,
+        thinking_text: '',
+        _thinkingOpen: enableDeepThink.value,
         _thinkingStartAt: Date.now(),
         _thinkingMs: 0,
-        sources: [],                // 本条 AI 回答的引用来源（独立持有，不被后续消息覆盖）
-        debugInfo: null,            // 本条 AI 回答的调试信息（独立持有）
-        agentOutput: null,          // 多智能体路由产生的结构化输出（chart/report/data_table）
+        sources: [],
+        debugInfo: null,
+        agentOutput: null,
       });
       messages.value.push(aiMsg);
       lastSources.value = [];
       lastDebugInfo.value = null;
       inputText.value = '';
       isStreaming.value = true;
+      _streamStartAt = Date.now();  // 记录流式请求开始时间
       saveMessagesToCache(activeSessionId.value, messages.value);
-      // 发送后强制滚到底：保证用户能立刻看到自己刚发的问题和接下来的流式回答
       scrollToBottom(true);
 
-      // 记录思考阶段是否结束
+      // 把即将发送的图片复制到局部（pendingImages 清空不影响）
+      const _sendingFiles = pendingImages.value.map(x => x.file).filter(Boolean);
+      console.log('[send] 准备发送的文件数量:', _sendingFiles.length,
+        _sendingFiles.map(f => ({ name: f.name, size: f.size, type: f.type })));
+
       let thinkingFinished = false;
+      // 请求超时 180s 中止保护
+      const controller = new AbortController();
+      const _timeoutId = setTimeout(() => {
+        console.error('[send] 请求超时 180s，强制中断');
+        controller.abort();
+      }, 180000);
 
       try {
-        const resp = await fetch(`${API_BASE}/api/chat/stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: q,
-            session_id: activeSessionId.value,
-            stream: true,
-            enable_deep_think: enableDeepThink.value,
-            model: selectedModelId.value,
-          }),
-        });
+        let resp;
+        if (hasImages) {
+          // 图片模式：使用 FormData 调用 /api/chat/image-stream
+          const formData = new FormData();
+          formData.append('session_id', activeSessionId.value);
+          formData.append('question', q);
+          formData.append('enable_deep_think', enableDeepThink.value ? 'true' : 'false');
+          for (const file of _sendingFiles) {
+            formData.append('files', file);
+          }
+          console.log('%c[send] → POST /api/chat/image-stream', 'color:#2563eb;font-weight:700;',
+            { session_id: activeSessionId.value,
+              question: q, enable_deep_think: enableDeepThink.value,
+              filesCount: _sendingFiles.length,
+              fileDetails: _sendingFiles.map(f => ({ name: f.name, size: f.size, type: f.type })) });
 
-        if (!resp.ok) throw new Error('后端请求失败 (HTTP ' + resp.status + ')');
+          console.log('[send] 开始 fetch 请求...');
+          resp = await fetch(`${API_BASE}/api/chat/image-stream`, {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+          });
+          console.log('[send] fetch 返回，响应状态:', resp.status, resp.statusText);
+          // 清空待发送图片（发送完毕后）
+          pendingImages.value = [];
+          if (fileInputRef.value) fileInputRef.value.value = '';
+        } else {
+          // 纯文本模式
+          resp = await fetch(`${API_BASE}/api/chat/stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: q,
+              session_id: activeSessionId.value,
+              stream: true,
+              enable_deep_think: enableDeepThink.value,
+              model: selectedModelId.value,
+            }),
+            signal: controller.signal,
+          });
+          console.log('[send] text-stream 响应状态:', resp.status, resp.statusText);
+        }
+
+        if (!resp.ok) {
+          const errBody = await resp.text().catch(() => '');
+          throw new Error('后端请求失败 (HTTP ' + resp.status + ') ' + errBody.slice(0, 200));
+        }
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
+        let eventCount = 0;
 
         while (true) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log('[send] 流结束，共处理事件:', eventCount);
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const chunks = buffer.split('\n\n');
           buffer = chunks.pop();
@@ -2369,40 +2704,52 @@ const app = createApp({
             const lines = part.split('\n').filter(l => l.trim());
             let event = null, rawData = null;
             for (const l of lines) {
-              if (l.startsWith('event:')) event = l.replace('event:', '').trim();
-              if (l.startsWith('data:')) rawData = l.replace(/^data:/, '').trim();
+              if (l.startsWith('event:')) event = l.slice(6).trim();  // 'event:' = 6 chars
+              if (l.startsWith('data:')) {
+                // 只移除 'data:' 前缀（5个字符），保留后面的空格
+                // 这是 SSE 协议标准：data: 后面可以有一个空格
+                rawData = l.slice(5);
+                // 如果后面跟着一个空格，也一起移除
+                if (rawData.startsWith(' ')) rawData = rawData.slice(1);
+              }
             }
             if (!event || rawData === null) continue;
+            eventCount++;
             let data;
             try { data = JSON.parse(rawData); } catch { data = rawData; }
-            // 调试用：在 F12 Console 打印所有 SSE 事件流（方便排查 debug 事件有没有收到）
-            const _preview = typeof data === 'string' ? data.slice(0, 80) : JSON.stringify(data).slice(0, 80);
-            console.log(`[SSE] event=${event}`, _preview, data);
+            if (eventCount <= 5 || event === 'done' || event === 'error' || eventCount % 20 === 0) {
+              console.log(`[send] event #${eventCount}`, event,
+                (typeof data === 'string' ? data.slice(0, 60) : (data !== null ? JSON.stringify(data).slice(0, 60) : null)));
+            }
+
+            // 图片事件：用服务端返回的静态 URL 替换用户消息中的本地 base64
+            if (event === 'image_events') {
+              const serverUrls = (data && data.image_urls) || [];
+              // 找到刚刚 push 的 user 消息并更新图片 URL
+              const lastUserMsg = [...messages.value].reverse().find(m => m.role === 'user');
+              if (lastUserMsg && serverUrls.length) {
+                lastUserMsg.images = serverUrls.map(url => API_BASE + url);
+              }
+              continue;
+            }
 
             if (event === 'source')  {
               aiMsg.sources = data || [];
-              lastSources.value = aiMsg.sources;   // 保留全局兼容
+              lastSources.value = aiMsg.sources;
             }
             if (event === 'debug')   {
               aiMsg.debugInfo = data || null;
-              lastDebugInfo.value = aiMsg.debugInfo;  // 保留全局兼容
-              console.log('[DebugPanel] 本条 AI 收到调试信息：', aiMsg.debugInfo);
+              lastDebugInfo.value = aiMsg.debugInfo;
             }
-
-            // 思考中 loading 提示
             if (event === 'thinking') {
               aiMsg.thinking = true;
             }
-
-            // 思考过程 token 增量
             if (event === 'thinking_token') {
-              aiMsg.thinking = false; // 有思考内容了，关闭 loading
+              aiMsg.thinking = false;
               aiMsg.thinking_text += data || '';
               aiMsg._thinkingMs = Date.now() - aiMsg._thinkingStartAt;
               scrollToBottom(false);
             }
-
-            // 思考结束事件 → 开始输出正式回答
             if (event === 'thinking_done') {
               thinkingFinished = true;
               aiMsg.thinking = false;
@@ -2410,15 +2757,11 @@ const app = createApp({
               saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom(false);
             }
-
-            // 回答 token 增量
             if (event === 'token') {
               aiMsg.thinking = false;
               aiMsg.content += data || '';
               scrollToBottom(false);
             }
-
-            // 智能体结构化输出（图表/报表/数据表格）
             if (event === 'agent_output') {
               aiMsg.thinking = false;
               aiMsg.agentOutput = data || null;
@@ -2427,48 +2770,29 @@ const app = createApp({
               const hasReport = !!(data && data.content && data.content.html_content);
               const hasTable = !!(data && data.content && data.content.data_table);
               console.log('%c[agent_output] ✅ 收到', 'color:#8b5cf6; font-weight:700;', {
-                type: outType,
-                hasChart, hasReport, hasTable,
-                textLen: (data?.content?.text || '').length,
-                chartSpecSummary: hasChart ? (() => {
-                  const cs = data.content.chart_spec;
-                  if (typeof cs !== 'object') return 'INVALID (not object)';
-                  if (!Array.isArray(cs.series)) return 'INVALID (no series array)';
-                  if (cs.series.length === 0) return 'EMPTY (series=[])';
-                  return `OK: ${cs.series.length} series, type=${cs.series[0]?.type}`;
-                })() : null,
+                type: outType, hasChart, hasReport, hasTable,
               });
-              // 加载 ECharts（按需，只在有 chart_spec 时）
-              if (hasChart) {
-                _ensureEcharts();
-              }
+              if (hasChart) _ensureEcharts();
               saveMessagesToCache(activeSessionId.value, messages.value);
               scrollToBottom(false);
             }
-
             if (event === 'done') {
               aiMsg.thinking = false;
               aiMsg._finalized = true;
               isStreaming.value = false;
-              // 记录 done 时刻的滚动位置，用于稍后检测"内容重排引发的跳顶"
+              _streamStartAt = 0;
               const elNow = msgListRef.value;
               const scrollTopAtDone = elNow ? elNow.scrollTop : 0;
               saveMessagesToCache(activeSessionId.value, messages.value);
-              // 回答结束后智能处理滚动（350ms 等最终 markdown 渲染稳定）：
-              //   1) 若此刻被重排甩到了顶部（scrollTop 归零但之前明明在很靠下）→ 自愈回底部看回答
-              //   2) 若用户本来就接近底部 → 轻轻跟到底
-              //   3) 若用户上滑在阅读历史 → 完全不动，绝不打扰
               setTimeout(() => {
                 const el = msgListRef.value;
                 if (!el) return;
                 if (scrollTopAtDone > 600 && el.scrollTop < 50) {
-                  // 异常跳顶自愈：直接回到回答末尾
-                  console.log('[ScrollGuard] done 后检测到跳顶，自愈回底部');
                   el.scrollTop = el.scrollHeight;
                   _lastScrollTop = el.scrollTop;
                   return;
                 }
-                scrollToBottom(false); // 非强制：仅当用户接近底部时才跟
+                scrollToBottom(false);
               }, 350);
             }
             if (event === 'error') {
@@ -2476,6 +2800,7 @@ const app = createApp({
               aiMsg.content = '❌ 出错了：\n```\n' + (data || '未知错误') + '\n```';
               aiMsg._finalized = true;
               isStreaming.value = false;
+              _streamStartAt = 0;
               saveMessagesToCache(activeSessionId.value, messages.value);
             }
           }
@@ -2485,13 +2810,32 @@ const app = createApp({
           aiMsg.thinking = false;
           if (!aiMsg.content) aiMsg.content = '（回复结束，但未收到内容）';
           isStreaming.value = false;
+          _streamStartAt = 0;
           saveMessagesToCache(activeSessionId.value, messages.value);
           scrollToBottom(true);
         }
+        clearTimeout(_timeoutId);
       } catch (e) {
+        clearTimeout(_timeoutId);
+        // 区分 AbortError（用户中止）和其他错误
+        if (e.name === 'AbortError') {
+          console.error('[send] 请求被中止 (AbortError)', {
+            message: e.message,
+            stack: e.stack?.slice(0, 200)
+          });
+          aiMsg.content = '⏹️ 请求已被中止。如果是超时，请检查网络连接并重试。';
+        } else {
+          console.error('[send] catch 异常:', {
+            name: e.name,
+            message: e.message,
+            stack: e.stack?.slice(0, 300)
+          });
+          aiMsg.content = '❌ 请求失败：' + e.message + '（请确认后端已启动在 8000 端口）';
+        }
         aiMsg.thinking = false;
-        aiMsg.content = '❌ 请求失败：' + e.message + '（请确认后端已启动在 8000 端口）';
+        aiMsg._finalized = true;
         isStreaming.value = false;
+        _streamStartAt = 0;
         saveMessagesToCache(activeSessionId.value, messages.value);
       }
     }
@@ -2654,10 +2998,45 @@ const app = createApp({
       await loadConversations();
       await loadChunkMethods();
       await loadIndexedFiles();
-      // 启动时拉一次 Provider（用于侧边栏 badge 显示数量）
       loadProviders();
       document.addEventListener('click', onDocClick);
     });
+
+    // ========== 图片上传相关 ==========
+    function onImageSelect(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      const MAX_IMAGES = 4;
+      const MAX_MB = 10;
+      const remaining = MAX_IMAGES - pendingImages.value.length;
+      const toAdd = Array.from(files).slice(0, remaining);
+      for (const file of toAdd) {
+        if (file.size > MAX_MB * 1024 * 1024) {
+          ElMessage.warning(`图片 ${file.name} 超过 ${MAX_MB}MB 限制，已跳过`);
+          continue;
+        }
+        const url = URL.createObjectURL(file);
+        pendingImages.value.push({ file, url, name: file.name });
+      }
+      // 重置 input，允许重复选择相同文件
+      event.target.value = '';
+    }
+
+    function removeImage(idx) {
+      const img = pendingImages.value[idx];
+      if (img && img.url) {
+        URL.revokeObjectURL(img.url);
+      }
+      pendingImages.value.splice(idx, 1);
+    }
+
+    function previewImage(url) {
+      // 简单的全屏预览
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(`<img src="${url}" style="max-width:100%;max-height:100vh;margin:auto;display:block;">`);
+      }
+    }
 
     return {
       API_BASE,
@@ -2684,6 +3063,13 @@ const app = createApp({
       loadProviders, openProviderForm, cancelProviderForm, saveProvider,
       handleProviderAction, setDefaultProvider, testProvider,
       toggleProvider, deleteProvider,
+      // 图片上传
+      pendingImages, fileInputRef,
+      onImageSelect, removeImage, previewImage,
+      // VL 视觉模型
+      vlConfig, isImageMode,
+      // 工具函数
+      isEmptyMessage,
     };
   }
 });
@@ -2692,31 +3078,22 @@ const app = createApp({
 // 用法：<div v-echart="spec" style="width:100%;height:360px;"></div>
 app.directive('echart', {
   mounted(el, binding) {
-    console.log('[v-echart] mounted 触发', {
-      hasSpec: !!binding.value,
-      specType: binding.value ? typeof binding.value : 'null',
-      hasSeries: !!(binding.value && binding.value.series),
-      seriesLen: binding.value && binding.value.series ? binding.value.series.length : 'N/A',
-      rect: el.getBoundingClientRect(),
-    });
     _tryRenderChart(el, binding.value);
   },
   updated(el, binding) {
-    console.log('[v-echart] updated 触发', {
-      hasInstance: !!el._echartsInstance,
-      hasSpec: !!binding.value,
-      seriesLen: binding.value && binding.value.series ? binding.value.series.length : 'N/A',
-    });
     if (el._echartsInstance && binding.value) {
       try { el._echartsInstance.setOption(binding.value, true); }
       catch (e) { console.error('[v-echart] setOption 失败', e); }
     } else if (!el._echartsInstance && binding.value) {
       // 实例还没创建好（异步加载中），重新尝试渲染
-      console.log('[v-echart] 实例不存在，重新尝试渲染');
       _tryRenderChart(el, binding.value);
     }
   },
   beforeUnmount(el) {
+    if (el._echartsRetryTimer) {
+      clearTimeout(el._echartsRetryTimer);
+      el._echartsRetryTimer = null;
+    }
     if (el._echartsInstance) {
       try { el._echartsInstance.dispose(); } catch (e) { /* ignore */ }
       el._echartsInstance = null;
@@ -2725,14 +3102,6 @@ app.directive('echart', {
 });
 
 function _tryRenderChart(el, spec) {
-  console.log('[v-echart] _tryRenderChart 开始', {
-    hasSpec: !!spec,
-    specType: spec ? typeof spec : 'null',
-    isObj: spec && typeof spec === 'object',
-    hasSeries: !!(spec && spec.series),
-    seriesIsArray: !!(spec && Array.isArray(spec.series)),
-    seriesLen: spec && spec.series ? spec.series.length : 'N/A',
-  });
   if (!spec) {
     el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">暂无图表数据</div>';
     return;
@@ -2752,11 +3121,22 @@ function _tryRenderChart(el, spec) {
       el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">图表库加载失败，请检查网络</div>';
       return;
     }
+    // 最多重试 10 次（10 × 200ms ≈ 2 秒），超过后放弃，避免无限 console.log
+    let retries = 0;
+    const MAX_RETRIES = 10;
+    // 清理旧的重试定时器，避免重复调度
+    if (el._echartsRetryTimer) { clearTimeout(el._echartsRetryTimer); el._echartsRetryTimer = null; }
+
     const tryInit = () => {
       const rect = el.getBoundingClientRect();
-      console.log('[v-echart] tryInit 尝试初始化', { width: rect.width, height: rect.height });
       if (rect.width < 50 || rect.height < 50) {
-        requestAnimationFrame(tryInit);
+        retries++;
+        if (retries <= MAX_RETRIES) {
+          el._echartsRetryTimer = setTimeout(tryInit, 200);
+        } else {
+          // 超过重试次数，给出占位提示（不再打印）
+          el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;text-align:center;">📏 图表容器尺寸太小，展开后会自动渲染</div>';
+        }
         return;
       }
       try {
@@ -2766,18 +3146,12 @@ function _tryRenderChart(el, spec) {
         const ro = new ResizeObserver(() => chart.resize());
         ro.observe(el);
         el._echartsInstance = chart;
-        console.log('[v-echart] ✅ 图表渲染成功', {
-          seriesCount: (spec.series || []).length,
-          chartType: spec.series[0]?.type,
-          title: spec.title?.text,
-        });
       } catch (e) {
         console.error('[v-echart] ❌ 图表渲染失败', e);
         el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">图表渲染失败：' + (e.message || e) + '</div>';
       }
     };
     tryInit();
-    setTimeout(tryInit, 500);
   }).catch((err) => {
     console.error('[v-echart] ECharts 加载 Promise 异常', err);
     el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">ECharts 加载异常</div>';

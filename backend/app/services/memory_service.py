@@ -10,9 +10,9 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 
 DEFAULT_MAX_MESSAGES = 100
@@ -29,8 +29,12 @@ _lock = threading.Lock()
 @dataclass
 class Message:
     role: str   # "user" / "assistant" / "system"
-    content: str
+    # content: 纯文字 str，或 OpenAI 多模态 list[dict]（形如 [{"type":"image_url","image_url":...}, {"type":"text","text":...}]）
+    content: Any
     metadata: dict | None = None
+    # 用户消息的图片 URL 列表（相对静态路径，如 /uploads/xxx.jpg）
+    #  等价于从 content 中提取 image_url，但为了老数据兼容，保留独立字段。
+    image_urls: list[str] = field(default_factory=list)
 
 
 # ==================================
@@ -119,64 +123,107 @@ class MemoryManager:
             conn.commit()
         return {"session_id": sid, "title": title, "created_at": now}
 
-    # -------- 追加消息（用户 + 助手成对）--------
-    def append(self, session_id: str, question: str, answer: str, metadata: dict | None = None) -> None:
+    # -------- 内部辅助：确保会话存在 + 取下一个 sort_index --------
+    def _ensure_session(self, conn, session_id: str, title_source: str) -> int:
+        now = datetime.now().isoformat(timespec="seconds")
+        cur = conn.execute(
+            "SELECT session_id FROM conversations WHERE session_id = ?",
+            (session_id,),
+        )
+        if not cur.fetchone():
+            title = self._truncate_title(title_source) or "新对话"
+            conn.execute(
+                "INSERT INTO conversations(session_id, title, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, title, now, now),
+            )
+        cur = conn.execute(
+            "SELECT COALESCE(MAX(sort_index), -1) FROM messages WHERE session_id = ?",
+            (session_id,),
+        )
+        return cur.fetchone()[0] + 1
+
+    def _touch_session(self, conn, session_id: str, title_source: str) -> None:
+        """更新会话 updated_at；若标题还是默认「新对话」则改为 title_source 摘要"""
+        now = datetime.now().isoformat(timespec="seconds")
+        cur = conn.execute(
+            "SELECT title FROM conversations WHERE session_id = ?",
+            (session_id,),
+        )
+        row = cur.fetchone()
+        new_title = self._truncate_title(title_source) or "新对话"
+        if row and (row["title"] == "新对话" or not row["title"]):
+            conn.execute(
+                "UPDATE conversations SET title = ?, updated_at = ? WHERE session_id = ?",
+                (new_title, now, session_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE conversations SET updated_at = ? WHERE session_id = ?",
+                (now, session_id),
+            )
+
+    # -------- 单独追加用户消息（流式开始时调用）--------
+    def append_user_message(self, session_id: str, question: str,
+                            user_metadata: dict | None = None) -> None:
+        """只写 user 消息（供流式接口在生成前调用）。
+        user_metadata.image_urls 会同时写入 content 的多模态 JSON。
+        """
         with _lock, _get_conn() as conn:
             now = datetime.now().isoformat(timespec="seconds")
+            next_idx = self._ensure_session(conn, session_id, question or "[图片]")
 
-            # 确保会话存在（不存在就新建，标题用 question 前几个字）
-            cur = conn.execute(
-                "SELECT session_id FROM conversations WHERE session_id = ?",
-                (session_id,),
-            )
-            if not cur.fetchone():
-                title = self._truncate_title(question) or "新对话"
-                conn.execute(
-                    "INSERT INTO conversations(session_id, title, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?)",
-                    (session_id, title, now, now),
-                )
+            image_urls = None
+            if user_metadata and isinstance(user_metadata, dict) and user_metadata.get("image_urls"):
+                image_urls = list(user_metadata["image_urls"])
+            if image_urls:
+                parts: list[dict[str, Any]] = [
+                    {"type": "image_url", "image_url": {"url": u}} for u in image_urls
+                ]
+                if question and question != "[图片]":
+                    parts.append({"type": "text", "text": question})
+                content_to_store = json.dumps(parts, ensure_ascii=False)
+            else:
+                content_to_store = question
 
-            # 当前 sort_index 最大值
-            cur = conn.execute(
-                "SELECT COALESCE(MAX(sort_index), -1) FROM messages WHERE session_id = ?",
-                (session_id,),
-            )
-            next_idx = cur.fetchone()[0] + 1
-
+            user_metadata_json = json.dumps(user_metadata, ensure_ascii=False) if user_metadata else None
             conn.execute(
-                "INSERT INTO messages(session_id, role, content, created_at, sort_index) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (session_id, "user", question, now, next_idx),
+                "INSERT INTO messages(session_id, role, content, metadata, created_at, sort_index) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, "user", content_to_store, user_metadata_json, now, next_idx),
             )
+            self._touch_session(conn, session_id, question or "[图片]")
+            conn.commit()
+            self._trim_if_needed(conn, session_id)
+
+    # -------- 单独追加助手消息（流式结束后调用）--------
+    def append_assistant_message(self, session_id: str, answer: str,
+                                 metadata: dict | None = None) -> None:
+        """只写 assistant 消息（供流式接口在生成完成后调用）"""
+        with _lock, _get_conn() as conn:
+            now = datetime.now().isoformat(timespec="seconds")
+            next_idx = self._ensure_session(conn, session_id, answer or "回答")
             assistant_metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
             conn.execute(
                 "INSERT INTO messages(session_id, role, content, metadata, created_at, sort_index) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, "assistant", answer, assistant_metadata_json, now, next_idx + 1),
+                (session_id, "assistant", answer, assistant_metadata_json, now, next_idx),
             )
-
-            # 更新会话时间 + 标题（如果是默认「新对话」就改成 question）
-            cur = conn.execute(
-                "SELECT title FROM conversations WHERE session_id = ?",
-                (session_id,),
-            )
-            row = cur.fetchone()
-            new_title = self._truncate_title(question) or "新对话"
-            if row and (row["title"] == "新对话" or not row["title"]):
-                conn.execute(
-                    "UPDATE conversations SET title = ?, updated_at = ? WHERE session_id = ?",
-                    (new_title, now, session_id),
-                )
-            else:
-                conn.execute(
-                    "UPDATE conversations SET updated_at = ? WHERE session_id = ?",
-                    (now, session_id),
-                )
+            self._touch_session(conn, session_id, answer or "回答")
             conn.commit()
-
-            # 超过 max_messages 就裁剪
             self._trim_if_needed(conn, session_id)
+
+    # -------- 追加消息（用户 + 助手成对）--------
+    def append(self, session_id: str, question: str, answer: str, metadata: dict | None = None,
+               user_metadata: dict | None = None) -> None:
+        """
+        追加一对消息（user + assistant）。适用于非流式一次性写入。
+        流式接口请改用 append_user_message + append_assistant_message。
+        - metadata: 存到 assistant 消息上（如 agent_output 图表数据）
+        - user_metadata: 存到 user 消息上（如 image_urls 图片列表）
+        """
+        self.append_user_message(session_id, question, user_metadata=user_metadata)
+        self.append_assistant_message(session_id, answer, metadata=metadata)
 
     def _trim_if_needed(self, conn, session_id: str) -> None:
         cur = conn.execute(
@@ -205,14 +252,56 @@ class MemoryManager:
                 rows = conn.execute(sql, (session_id, session_id)).fetchall()
             else:
                 rows = conn.execute(sql, (session_id,)).fetchall()
-            return [
-                Message(
-                    role=r["role"],
-                    content=r["content"],
-                    metadata=json.loads(r["metadata"]) if r["metadata"] else None,
-                )
-                for r in rows
-            ]
+
+        result: list[Message] = []
+        for r in rows:
+            role = r["role"]
+            raw_content = r["content"] or ""
+            raw_metadata = json.loads(r["metadata"]) if r["metadata"] else None
+
+            # —— 多模态 content 解析 ——
+            content_out: Any = raw_content
+            image_urls_out: list[str] = []
+
+            if role == "user":
+                parsed_list = None
+                if isinstance(raw_content, str):
+                    # 尝试解析为多模态 JSON list
+                    stripped = raw_content.strip()
+                    if stripped.startswith("[") and stripped.endswith("]"):
+                        try:
+                            parsed_list = json.loads(raw_content)
+                        except Exception:
+                            parsed_list = None
+                if isinstance(parsed_list, list):
+                    # 多模态格式：[{"type":"image_url",...}, {"type":"text",...}]
+                    texts: list[str] = []
+                    for part in parsed_list:
+                        if not isinstance(part, dict):
+                            continue
+                        ptype = part.get("type")
+                        if ptype == "image_url":
+                            iu = part.get("image_url") or {}
+                            url = iu.get("url") if isinstance(iu, dict) else None
+                            if url:
+                                image_urls_out.append(url)
+                        elif ptype == "text":
+                            txt = part.get("text")
+                            if isinstance(txt, str):
+                                texts.append(txt)
+                    content_out = "\n".join(t for t in texts if t) if texts else "[图片]"
+                else:
+                    # 老版本：用 user_metadata.image_urls 兼容
+                    if isinstance(raw_metadata, dict) and raw_metadata.get("image_urls"):
+                        image_urls_out = list(raw_metadata["image_urls"])
+
+            result.append(Message(
+                role=role,
+                content=content_out,
+                metadata=raw_metadata,
+                image_urls=image_urls_out,
+            ))
+        return result
 
     # -------- 清空单个会话 --------
     def clear(self, session_id: str) -> None:

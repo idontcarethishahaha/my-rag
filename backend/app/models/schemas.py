@@ -109,6 +109,8 @@ class MessageItem(BaseModel):
     role: str   # user / assistant
     content: str
     metadata: Optional[dict[str, Any]] = None
+    # 用户消息的图片列表（多模态），静态资源 URL 相对路径如 /uploads/xxx.jpg，前端渲染时拼 API_BASE
+    images: Optional[list[str]] = None
 
 
 # ---------- 通用 ----------

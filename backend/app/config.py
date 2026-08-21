@@ -95,6 +95,18 @@ RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "10.0"))  # 秒，超时直�
 RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", str(RAG_RERANK_TOP_N)))
 
 # ==================================
+# 视觉模型（VL）配置 —— 图片识别
+# ==================================
+VL_ENABLE = os.getenv("VL_ENABLE", "true").lower() == "true"
+VL_MODEL = os.getenv("VL_MODEL", "glm-4.1v-thinking-flash")
+VL_API_KEY = os.getenv("VL_API_KEY", API_KEY)
+VL_BASE_URL = _clean_url(os.getenv("VL_BASE_URL", BASE_URL))
+VL_TEMPERATURE = float(os.getenv("VL_TEMPERATURE", "0.7"))
+VL_MAX_IMAGE_MB = int(os.getenv("VL_MAX_IMAGE_MB", "10"))
+VL_MAX_IMAGES = int(os.getenv("VL_MAX_IMAGES", "4"))
+VL_IMAGE_MAX_EDGE = int(os.getenv("VL_IMAGE_MAX_EDGE", "1600"))  # 最长边压缩到 1600px
+
+# ==================================
 # 路径
 # ==================================
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
@@ -121,6 +133,8 @@ def reload():
     global RERANK_ENABLE, RERANK_PROVIDER, RERANK_MODEL, RERANK_DEVICE
     global RERANK_BASE_URL, RERANK_API_KEY, RERANK_TIMEOUT, RERANK_TOP_N
     global RAG_ENABLE_RERANK, RAG_RERANK_TOP_N
+    global VL_ENABLE, VL_MODEL, VL_API_KEY, VL_BASE_URL, VL_TEMPERATURE
+    global VL_MAX_IMAGE_MB, VL_MAX_IMAGES, VL_IMAGE_MAX_EDGE
     API_KEY = os.getenv("OPENAI_API_KEY", "")
     BASE_URL = _clean_url(os.getenv("OPENAI_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"))
     MODEL_ID = os.getenv("MODEL_NAME", "glm-4.5-flash")
@@ -138,3 +152,11 @@ def reload():
     RERANK_API_KEY = os.getenv("RERANK_API_KEY", EMBEDDING_API_KEY)
     RERANK_TIMEOUT = float(os.getenv("RERANK_TIMEOUT", "10.0"))
     RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", str(RAG_RERANK_TOP_N)))
+    VL_ENABLE = os.getenv("VL_ENABLE", "true").lower() == "true"
+    VL_MODEL = os.getenv("VL_MODEL", "glm-4.1v-thinking-flash")
+    VL_API_KEY = os.getenv("VL_API_KEY", API_KEY)
+    VL_BASE_URL = _clean_url(os.getenv("VL_BASE_URL", BASE_URL))
+    VL_TEMPERATURE = float(os.getenv("VL_TEMPERATURE", "0.7"))
+    VL_MAX_IMAGE_MB = int(os.getenv("VL_MAX_IMAGE_MB", "10"))
+    VL_MAX_IMAGES = int(os.getenv("VL_MAX_IMAGES", "4"))
+    VL_IMAGE_MAX_EDGE = int(os.getenv("VL_IMAGE_MAX_EDGE", "1600"))
