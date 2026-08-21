@@ -202,3 +202,5 @@ chroma_*/
 *.hdf5
 *.npy
 *.npz
+
+.uv-cache

@@ -30,6 +30,7 @@ _lock = threading.Lock()
 class Message:
     role: str   # "user" / "assistant" / "system"
     content: str
+    metadata: dict | None = None
 
 
 # ==================================
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id TEXT NOT NULL,
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
+    metadata   TEXT,
     created_at TEXT NOT NULL,
     sort_index INTEGER NOT NULL,
     FOREIGN KEY (session_id) REFERENCES conversations(session_id) ON DELETE CASCADE
@@ -62,6 +64,13 @@ def _init_db() -> None:
     with _get_conn() as conn:
         conn.executescript(_SCHEMA_SQL)
         conn.commit()
+
+        # 迁移：确保 metadata 列存在
+        try:
+            conn.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
+            conn.commit()
+        except Exception:
+            pass  # 列已存在时 SQLite 会报错，忽略
 
 
 @contextmanager
@@ -111,7 +120,7 @@ class MemoryManager:
         return {"session_id": sid, "title": title, "created_at": now}
 
     # -------- 追加消息（用户 + 助手成对）--------
-    def append(self, session_id: str, question: str, answer: str) -> None:
+    def append(self, session_id: str, question: str, answer: str, metadata: dict | None = None) -> None:
         with _lock, _get_conn() as conn:
             now = datetime.now().isoformat(timespec="seconds")
 
@@ -140,10 +149,11 @@ class MemoryManager:
                 "VALUES (?, ?, ?, ?, ?)",
                 (session_id, "user", question, now, next_idx),
             )
+            assistant_metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
             conn.execute(
-                "INSERT INTO messages(session_id, role, content, created_at, sort_index) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (session_id, "assistant", answer, now, next_idx + 1),
+                "INSERT INTO messages(session_id, role, content, metadata, created_at, sort_index) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, "assistant", answer, assistant_metadata_json, now, next_idx + 1),
             )
 
             # 更新会话时间 + 标题（如果是默认「新对话」就改成 question）
@@ -186,7 +196,7 @@ class MemoryManager:
     def get_messages(self, session_id: str, last_n: Optional[int] = None) -> list[Message]:
         with _get_conn() as conn:
             sql = (
-                "SELECT role, content FROM messages "
+                "SELECT role, content, metadata FROM messages "
                 "WHERE session_id = ? ORDER BY sort_index ASC"
             )
             if last_n:
@@ -195,7 +205,14 @@ class MemoryManager:
                 rows = conn.execute(sql, (session_id, session_id)).fetchall()
             else:
                 rows = conn.execute(sql, (session_id,)).fetchall()
-            return [Message(role=r["role"], content=r["content"]) for r in rows]
+            return [
+                Message(
+                    role=r["role"],
+                    content=r["content"],
+                    metadata=json.loads(r["metadata"]) if r["metadata"] else None,
+                )
+                for r in rows
+            ]
 
     # -------- 清空单个会话 --------
     def clear(self, session_id: str) -> None:

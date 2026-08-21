@@ -237,8 +237,11 @@ def chunk_and_store(file_id: str, chunk_method: str = "recursive") -> dict:
     # 更新状态
     prog.status = "indexing"
     prog.error = None
+    logger.info(f"[chunk] 开始分块: file_id={file_id}, method={chunk_method}")
+    prog.progress = 0.05
 
     try:
+        prog.progress = 0.01  # 标记已进入分块流程
         # 获取解析后的文档：优先从内存取，没有就从磁盘重新解析
         docs = _parsed_docs.get(file_id)
         if not docs:
@@ -255,6 +258,9 @@ def chunk_and_store(file_id: str, chunk_method: str = "recursive") -> dict:
 
         if not docs:
             raise RuntimeError("文件内容为空")
+
+        logger.info(f"[chunk] 文档加载完成: {len(docs)} 个 Document")
+        prog.progress = 0.1
 
         method: ChunkMethod = chunk_method  # type: ignore[assignment]
         token_size = max(256, RAG_CHUNK_SIZE // 2)
@@ -282,15 +288,36 @@ def chunk_and_store(file_id: str, chunk_method: str = "recursive") -> dict:
         if not chunks:
             raise RuntimeError("分块结果为空")
 
-        # 打元数据 + 关键词提取 + 问题生成
+        logger.info(f"[chunk] 分块完成: {len(chunks)} 个 chunks")
+        prog.progress = 0.2
+
+        # 打元数据
         from .keyword_service import extract_keywords, generate_questions
+        total_chunks = len(chunks)
+        is_large_file = total_chunks > 50
         for ch in chunks:
             ch.metadata["file_id"] = file_id
             ch.metadata.setdefault("source", prog.file_name)
             ch.metadata["chunk_method"] = method
-            text = ch.page_content or ""
-            ch.metadata["keywords"] = extract_keywords(text, top_k=5)
-            ch.metadata["questions"] = generate_questions(text, count=3)
+
+        # 关键词提取 + 问题生成（Excel/CSV 直接跳过，大文件跳过）
+        file_type = chunks[0].metadata.get("file_type", "") if chunks else ""
+        skip_keywords = is_large_file or file_type in ("xlsx", "csv")
+
+        if not skip_keywords:
+            kw_total = len(chunks)
+            kw_done = 0
+            for ch in chunks:
+                text = ch.page_content or ""
+                ch.metadata["keywords"] = extract_keywords(text, top_k=5)
+                ch.metadata["questions"] = generate_questions(text, count=3)
+                kw_done += 1
+                if kw_done % 10 == 0 or kw_done == kw_total:
+                    prog.progress = 0.2 + 0.1 * (kw_done / kw_total)
+                    logger.info(f"[chunk] keyword {kw_done}/{kw_total}, progress={prog.progress:.2f}")
+        else:
+            prog.progress = 0.3
+            logger.info(f"[chunk] 跳过 keyword/question（file_type={file_type}, large={is_large_file}）")
 
         # 非 parent_child：相邻 3 块拼接注入 parent_content
         if method != "parent_child":
@@ -303,15 +330,26 @@ def chunk_and_store(file_id: str, chunk_method: str = "recursive") -> dict:
                     parts.append(chunks[i + 1].page_content)
                 ch.metadata["parent_content"] = "\n\n".join(parts)
 
-        # Embed + Store
+        logger.info(f"[chunk] 元数据打标完成，开始 embedding")
+        prog.progress = 0.3
+
+        # Embed + Store (分批处理，避免 API 超时)
+        BATCH_SIZE = 32
         store = get_vector_store()
-        store.add_documents(chunks)
+        for batch_start in range(0, total_chunks, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_chunks)
+            batch = chunks[batch_start:batch_end]
+            store.add_documents(batch)
+            prog.progress = 0.3 + 0.6 * (batch_end / total_chunks)
+            if batch_start % (BATCH_SIZE * 5) == 0 or batch_end == total_chunks:
+                logger.info(f"[chunk] embed {batch_start}-{batch_end}/{total_chunks}, progress={prog.progress:.2f}")
 
         if VECTOR_DB_TYPE == "faiss":
             save_path_faiss = f"{VECTOR_DB_PATH}/faiss_index"
             store.save_local(save_path_faiss)
 
         # 更新进度
+        prog.progress = 0.9
         prog.status = "done"
         prog.progress = 1.0
         prog.chunks_count = len(chunks)

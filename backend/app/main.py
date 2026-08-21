@@ -6,6 +6,7 @@ my-rag — 完整 RAG 系统 后端入口
   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 """
 from __future__ import annotations
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

@@ -10,14 +10,21 @@
 
 ## 🌟 特性
 
-- **多LLM支持**：智谱GLM、通义千问、Ollama本地模型、OpenAI兼容接口
+- **多 LLM Provider 配置**：支持新增/管理多个大模型服务商，可启用/禁用/设置默认
+- **Agent 系统**：ChartAgent（图表生成）、DataAgent（数据分析）、ReportAgent（报表生成）
+- **图表生成**：支持饼图、柱状图、折线图、散点图等 10 种 ECharts 图表
+- **数据分析**：自动生成摘要、数据表格、洞察发现
+- **报表生成**：结构化 HTML 报表，沙箱 iframe 渲染
 - **多向量数据库**：ChromaDB（零配置）、Qdrant、FAISS
-- **多格式文档**：PDF/Word/Excel/Markdown/TXT/HTML
-- **智能分块**：中文友好的语义分块，支持重叠
-- **流式对话**：实时响应，逐字显示
-- **对话记忆**：滑动窗口上下文管理
-- **来源引用**：精确的文件名、页码、相似度标注
-- **豆包UI**：现代化交互界面，支持拖拽上传
+- **多格式文档**：PDF/Word/Excel/CSV/Markdown/TXT/HTML
+- **智能分块**：4 种分块策略（recursive/intelligent/table/parent_child）
+- **Hybrid Search**：Dense + BM25 Sparse 双路检索 + RRF 融合
+- **多查询分解**：Multi-Query 多路检索 + HyDE 假设文档
+- **Rerank 重排序**：本地 CrossEncoder + SiliconFlow 远端 API 双模式
+- **意图识别**：chat/file_list/kb_query/follow_up 四类路由 + Query 改写
+- **流式对话**：实时响应，逐字显示，深度思考模式
+- **对话持久化**：SQLite 存储会话历史，图表/数据/报表 metadata 持久化
+- **豆包 UI**：现代化交互界面，支持拖拽上传、进度反馈
 
 ---
 
@@ -63,8 +70,12 @@
 ### 前端界面（豆包风格）
 
 - 左侧会话栏：新建 / 切换 / 删除会话
-- 右侧聊天区：流式逐字显示 + 思考中动画 + 来源引用标签
-- 知识库管理抽屉：拖拽上传 + 已索引列表 + 删除
+- 右侧聊天区：流式逐字显示 + 思考中动画 + 来源引用标签 + 调试面板
+- **多 LLM Provider 管理**：新增/编辑/删除/启用/禁用/测试连接
+- **图表卡片**：ECharts 渲染饼图/柱状图/折线图等，支持刷新后恢复
+- **数据卡片**：摘要 + 表格 + 洞察 + 内嵌小图表
+- **报表卡片**：HTML 报表沙箱 iframe 渲染
+- 知识库管理抽屉：拖拽上传 + 分块方式选择 + 进度反馈
 - 欢迎页：快捷问题卡片
 - 顶部栏：模型切换 + 深度思考开关
 
@@ -77,11 +88,14 @@
 | 后端框架 | FastAPI | ≥0.115 |
 | RAG 框架 | LangChain | ≥0.3 |
 | 向量数据库 | ChromaDB | ≥0.5 |
-| 嵌入模型 | 智谱 embedding-3 | 256 维 |
-| LLM | 智谱 GLM-4.5-Flash | OpenAI 兼容协议 |
-| 文档解析 | pypdf / python-docx / unstructured | — |
+| 嵌入模型 | BAAI/bge-m3 | 1024 维 |
+| LLM | 智谱 GLM-4.5-Flash / 多 Provider 支持 | OpenAI 兼容协议 |
+| Rerank | BAAI/bge-reranker-v2-m3 | CrossEncoder |
+| 文档解析 | unstructured / pandas / pypdf | — |
+| 图表渲染 | ECharts | 5.x |
 | 前端框架 | Vue 3 | 3.4（CDN 引入） |
 | 前端 UI | Element Plus | 2.8（CDN 引入） |
+| 数据库 | SQLite | 3.x（对话持久化） |
 | Python | 3.12+ | — |
 
 ---
@@ -98,25 +112,34 @@ my-rag/
 │   │   ├── main.py                        ← FastAPI 入口
 │   │   ├── config.py                      ← 配置管理
 │   │   ├── models/schemas.py              ← 数据模型
-│   │   ├── loaders/document_loader.py     ← 文档加载
-│   │   ├── splitters/text_splitter.py     ← 文本切块
-│   │   ├── embeddings/embed_factory.py    ← 嵌入模型
-│   │   ├── store/vector_store.py          ← 向量库
+│   │   ├── loaders/document_loader.py     ← 文档加载（PDF/Excel/Word/CSV）
+│   │   ├── splitters/text_splitter.py     ← 4 种分块策略
+│   │   ├── embeddings/embed_factory.py    ← 嵌入模型工厂
+│   │   ├── store/vector_store.py          ← 向量库 + Hybrid Search
+│   │   ├── agents/                        ← Agent 系统（新增）
+│   │   │   ├── base_agent.py              ← Agent 基类
+│   │   │   ├── chart_agent.py             ← 图表生成 Agent
+│   │   │   ├── data_agent.py              ← 数据分析 Agent
+│   │   │   └── report_agent.py            ← 报表生成 Agent
 │   │   ├── services/
 │   │   │   ├── indexer_service.py         ← 索引流水线
-│   │   │   ├── retriever_service.py       ← 检索+重排
+│   │   │   ├── retriever_service.py       ← 检索 + Hybrid Search + Rerank
 │   │   │   ├── generator_service.py       ← LLM 生成
-│   │   │   ├── rag_service.py             ← 推理编排
-│   │   │   └── memory_service.py          ← 对话记忆
+│   │   │   ├── rag_service.py             ← 推理编排 + Agent 路由
+│   │   │   ├── intent_service.py          ← 意图识别 + Query 改写
+│   │   │   ├── keyword_service.py         ← 关键词提取 + 问题生成
+│   │   │   ├── memory_service.py          ← 对话记忆（SQLite + metadata）
+│   │   │   └── provider_service.py        ← LLM Provider 管理
 │   │   └── routers/
 │   │       ├── index_router.py            ← 知识库 API
-│   │       └── chat_router.py             ← 对话 API
-│   ├── data/uploads/                     ← 上传文件目录
+│   │       ├── chat_router.py             ← 对话 API
+│   │       └── provider_router.py         ← LLM Provider API
+│   ├── data/                              ← SQLite 对话存储 + Provider 配置
 │   ├── vector_db/                        ← ChromaDB 数据目录
 │   ├── .env.example                      ← 环境变量模板
 │   └── requirements.txt                  ← 依赖清单
 └── frontend/
-    └── index.html                         ← 前端界面
+    └── index.html                         ← 前端界面（Vue3 + Element Plus + ECharts）
 ```
 
 ---
@@ -453,12 +476,97 @@ curl -N -X POST http://localhost:8000/api/chat/stream \
 ]
 ```
 
+#### GET /api/conversations/{session_id}/messages — 获取历史消息
+
+**响应：**
+
+```json
+[
+  {
+    "role": "user",
+    "content": "把 movie.xlsx 的评分做一个饼状图",
+    "metadata": null
+  },
+  {
+    "role": "ai",
+    "content": "📊 基于原始文件 movie.xlsx 为您生成「饼图」：",
+    "metadata": {
+      "agent_output": {
+        "type": "chart",
+        "content": { "chart_spec": { ... } }
+      }
+    }
+  }
+]
+```
+
+> `metadata` 字段包含 Agent 输出（图表/数据/报表），用于前端刷新后恢复渲染。
+
 #### DELETE /api/conversations/{session_id} — 清空会话
 
 **响应：**
 
 ```json
 { "status": "ok" }
+```
+
+---
+
+### LLM Provider 管理
+
+#### GET /api/providers — 列出所有 Provider
+
+**响应：**
+
+```json
+[
+  {
+    "id": "p1",
+    "name": "智谱 GLM-4.5-Flash",
+    "model_id": "glm-4.5-flash",
+    "api_key": "sk-****xxxx",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "provider": "zhipu",
+    "is_default": true,
+    "active": true,
+    "supports_deep_think": true,
+    "temperature": 0.1,
+    "max_tokens": 4096
+  }
+]
+```
+
+#### POST /api/providers — 新建 Provider
+
+**请求：**
+
+```json
+{
+  "name": "自定义模型",
+  "model_id": "my-model",
+  "api_key": "sk-xxx",
+  "base_url": "https://api.example.com/v1",
+  "provider": "custom",
+  "is_default": false,
+  "active": true,
+  "supports_deep_think": false,
+  "temperature": 0.7,
+  "max_tokens": 4096
+}
+```
+
+#### PUT /api/providers/{id} — 更新 Provider
+
+#### DELETE /api/providers/{id} — 删除 Provider
+
+#### PUT /api/providers/{id}/default — 设为默认 Provider
+
+#### POST /api/providers/{id}/test — 测试连接
+
+**响应：**
+
+```json
+{ "status": "ok", "message": "连接成功", "latency_ms": 234 }
 ```
 
 ---
@@ -492,10 +600,14 @@ curl -N -X POST http://localhost:8000/api/chat/stream \
 
 | 事件顺序 | event | data | 说明 |
 |---------|-------|------|------|
-| 1 | `source` | `[{chunk_id, content, source_file, page, score}]` | 检索到的引用来源 |
-| 2 | `thinking` | `null` | LLM 开始生成 |
-| 3 | `token` | `"一个字"` | 逐 token 输出（重复多次） |
-| 4 | `done` | `null` | 生成完毕 |
+| 1 | `debug` | `{intent, original_query, rewritten_query, retrieval}` | 调试信息（意图/检索/Rerank） |
+| 2 | `source` | `[{chunk_id, content, source_file, page, score, metadata}]` | 检索到的引用来源 |
+| 3 | `thinking` | `null` | LLM 开始生成思考过程 |
+| 4 | `thinking_token` | `"思考内容"` | 思考过程 token（深度思考模式） |
+| 5 | `thinking_done` | `null` | 思考过程结束 |
+| 6 | `agent_output` | `{type, content}` | Agent 输出（图表/数据/报表） |
+| 7 | `token` | `"一个字"` | 逐 token 输出（重复多次） |
+| 8 | `done` | `null` | 生成完毕 |
 | — | `error` | `"错误信息"` | 出错时 |
 
 **SSE 原始格式：**
@@ -539,13 +651,20 @@ data: null
 ```
 用户提问
   │
-  ├─ Query 改写     retriever_service.py     （可选）LLM 优化查询
-  ├─ 向量检索        vector_store.py          Top-K=6，阈值 0.6
-  ├─ 重排序          retriever_service.py     （可选）BGE-Reranker
-  ├─ 构造 Prompt     generator_service.py     系统提示 + 上下文 + 问题
-  ├─ LLM 生成        generator_service.py     GLM-4.5-Flash 流式输出
-  ├─ 来源引用        rag_service.py           文件名 + 页码 + 相似度
-  └─ 记忆写入        memory_service.py        滑动窗口 100 条
+  ├─ 意图识别     intent_service.py     chat / file_list / kb_query / follow_up
+  ├─ Query 改写   intent_service.py     follow_up 指代消解
+  ├─ Agent 路由   rag_service.py       Excel/CSV 文件 → ChartAgent / DataAgent / ReportAgent
+  │   ├─ ChartAgent: 数据理解 → 图表选型 → 图表生成 (3 阶段)
+  │   ├─ DataAgent: 数据理解 → 摘要/表格/洞察/图表
+  │   └─ ReportAgent: 结构化 HTML 报表
+  ├─ 多查询分解   retriever_service.py   Multi-Query 主查询 + N 子查询
+  ├─ HyDE（可选） retriever_service.py   生成假设文档辅助检索
+  ├─ Hybrid Search vector_store.py      Dense + BM25 Sparse → RRF 融合
+  ├─ Rerank       retriever_service.py   CrossEncoder 精排 Top-N
+  ├─ 构造 Prompt   generator_service.py     系统提示 + 上下文 + 问题
+  ├─ LLM 生成      generator_service.py     GLM-4.5-Flash 流式输出
+  ├─ 来源引用      rag_service.py           文件名 + 页码 + 相似度
+  └─ 记忆写入      memory_service.py        SQLite 持久化 + metadata
 ```
 
 ### RAG Prompt 模板
@@ -604,7 +723,21 @@ docker run -p 6333:6333 qdrant/qdrant
 
 ### Q: 对话记忆重启后丢失
 
-当前使用内存存储。如需持久化，可升级为 Redis（加分项 E12）。
+对话已使用 SQLite 持久化（`backend/data/chat_memory.db`），重启后历史消息仍在。
+
+### Q: 图表刷新后消失
+
+图表数据通过 `metadata` 字段持久化到会话历史。确保后端版本为最新（重启后端），且使用新会话重新生成图表。
+
+### Q: 如何切换 LLM 模型
+
+两种方式：
+1. 前端顶部栏下拉切换已配置的 Provider
+2. 编辑 `.env` 修改默认模型配置，重启后端
+
+### Q: 如何管理多个 LLM Provider
+
+前端「设置」抽屉 → Provider 管理，支持新增/编辑/删除/启用/禁用/测试连接。
 
 ### Q: ChromaDB 数据在哪
 

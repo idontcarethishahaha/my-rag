@@ -978,6 +978,14 @@
     width: 100%;
   }
 
+  .chunk-progress {
+    margin-top: 6px;
+    width: 100%;
+  }
+  .chunk-progress .el-progress-bar__outer {
+    border-radius: 10px;
+  }
+
   .file-info { flex: 1; min-width: 0; }
   .file-name {
     font-size: 13.5px; font-weight: 500; color: #111827;
@@ -1223,7 +1231,7 @@
                   <!-- report：HTML 报表（沙箱化 iframe，避免样式污染）；兜底纯文字显示 -->
                   <div v-else-if="m.agentOutput.type === 'report'" class="agent-card agent-report-card">
                     <iframe
-                      v-if="m.agentOutput.content.html_content && _looksLikeHtml(m.agentOutput.content.html_content)"
+                      v-if="m.agentOutput.content.html_content && looksLikeHtml(m.agentOutput.content.html_content)"
                       :key="'report-' + m._uid"
                       class="agent-report-frame"
                       :srcdoc="m.agentOutput.content.html_content"
@@ -1549,6 +1557,10 @@
               <el-tag v-if="f.status==='done'" type="success" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">已入库</el-tag>
               <el-tag v-else-if="f.status==='parsed'" type="warning" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">待分块</el-tag>
               <el-tag v-else-if="f.status==='indexing'" type="warning" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">处理中</el-tag>
+              <!-- 分块进度条 -->
+              <div v-if="f.status==='indexing'" class="chunk-progress">
+                <el-progress :percentage="Math.round((f.progress || 0) * 100)" :stroke-width="14" :show-text="true" />
+              </div>
               <el-tag v-else type="danger" size="small" effect="plain" style="--el-tag-padding:0 6px; height:18px; line-height:16px;">{{ f.status }}</el-tag>
               <template v-if="f.status==='done'">
                 <span class="dot"></span>
@@ -1583,6 +1595,11 @@
             >
               执行分块
             </el-button>
+          </div>
+          <!-- 分块进行中显示提示 -->
+          <div v-if="f.status === 'indexing'" class="chunk-row" style="color:#6b7280; font-size:12px; align-items:center;">
+            <el-icon class="is-loading" style="margin-right:6px;"><Loading /></el-icon>
+            正在分块，请稍候...
           </div>
         </div>
       </div>
@@ -2136,7 +2153,7 @@ const app = createApp({
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
     // 检测一段字符串看起来像不像 HTML（用于 report iframe 判定）
-    function _looksLikeHtml(s) {
+    function looksLikeHtml(s) {
       if (!s || typeof s !== 'string') return false;
       const t = s.trim();
       if (t.length < 20) return false;
@@ -2215,6 +2232,15 @@ const app = createApp({
               const role = sm.role === 'assistant' ? 'ai' : sm.role;
               // 保留缓存中的 _uid，没有则生成新的
               const uid = (cachedMsg && cachedMsg._uid) || _nextMsgUid();
+
+              // 恢复 agentOutput：优先用后端 metadata.agent_output，其次用缓存
+              let agentOutput = null;
+              if (sm.metadata && sm.metadata.agent_output) {
+                agentOutput = sm.metadata.agent_output;
+              } else if (cachedMsg && cachedMsg.agentOutput) {
+                agentOutput = cachedMsg.agentOutput;
+              }
+
               merged.push(reactive({
                 _uid: uid,
                 role: role,
@@ -2223,6 +2249,7 @@ const app = createApp({
                 thinking_text: (cachedMsg && cachedMsg.thinking_text) || '',
                 _thinkingOpen: (cachedMsg && cachedMsg._thinkingOpen) || false,
                 _thinkingMs: (cachedMsg && cachedMsg._thinkingMs) || 0,
+                agentOutput: agentOutput,
               }));
             }
             messages.value = merged;
@@ -2395,24 +2422,24 @@ const app = createApp({
             if (event === 'agent_output') {
               aiMsg.thinking = false;
               aiMsg.agentOutput = data || null;
-              console.log('%c[agent_output] 收到智能体结构化输出', 'color:#8b5cf6; font-weight:700;', {
-                type: data && data.type,
-                contentKeys: data && data.content ? Object.keys(data.content) : [],
-                contentPreview: (() => {
-                  const c = data && data.content;
-                  if (!c) return null;
-                  const p = {};
-                  if (c.text) p.text = c.text.slice(0, 80);
-                  if (c.html_content) p.html_len = c.html_content.length + ', html_looksLike=' + _looksLikeHtml(c.html_content);
-                  if (c.chart_spec) p.has_chart = true;
-                  if (c.data_table) p.table_shape = (c.data_table.headers || []).length + '列 × ' + (c.data_table.rows || []).length + '行';
-                  if (c.insights) p.insights_count = (c.insights || []).length;
-                  return p;
-                })(),
-                raw: data,
+              const outType = data && data.type;
+              const hasChart = !!(data && data.content && data.content.chart_spec);
+              const hasReport = !!(data && data.content && data.content.html_content);
+              const hasTable = !!(data && data.content && data.content.data_table);
+              console.log('%c[agent_output] ✅ 收到', 'color:#8b5cf6; font-weight:700;', {
+                type: outType,
+                hasChart, hasReport, hasTable,
+                textLen: (data?.content?.text || '').length,
+                chartSpecSummary: hasChart ? (() => {
+                  const cs = data.content.chart_spec;
+                  if (typeof cs !== 'object') return 'INVALID (not object)';
+                  if (!Array.isArray(cs.series)) return 'INVALID (no series array)';
+                  if (cs.series.length === 0) return 'EMPTY (series=[])';
+                  return `OK: ${cs.series.length} series, type=${cs.series[0]?.type}`;
+                })() : null,
               });
               // 加载 ECharts（按需，只在有 chart_spec 时）
-              if (data && data.content && data.content.chart_spec) {
+              if (hasChart) {
                 _ensureEcharts();
               }
               saveMessagesToCache(activeSessionId.value, messages.value);
@@ -2512,11 +2539,14 @@ const app = createApp({
         if (resp.ok) {
           const files = await resp.json();
           // 给待分块文件加上 selected_method 默认值和 _chunking 状态
-          indexedFiles.value = files.map(f => ({
-            ...f,
-            selected_method: 'recursive',
-            _chunking: false,
-          }));
+          indexedFiles.value = files.map(f => {
+            const existing = indexedFiles.value.find(x => x.file_id === f.file_id);
+            return {
+              ...f,
+              selected_method: existing?.selected_method || 'recursive',
+              _chunking: existing?._chunking || false,
+            };
+          });
         }
       } catch {}
       finally { loadingFiles.value = false; }
@@ -2528,6 +2558,9 @@ const app = createApp({
         return;
       }
       f._chunking = true;
+      // 先将状态改为 indexing，让 UI 立即显示进度条
+      f.status = 'indexing';
+      f.progress = 0;
       try {
         const resp = await fetch(`${API_BASE}/api/index/${f.file_id}/chunk`, {
           method: 'POST',
@@ -2543,14 +2576,54 @@ const app = createApp({
           } catch {}
           throw new Error(errMsg);
         }
-        const data = await resp.json();
-        ElementPlus.ElMessage.success(`「${f.file_name}」分块成功，切成 ${data.chunks_count} 块`);
-        await loadIndexedFiles();
+        // 后端已启动后台分块任务，开始轮询进度
+        ElementPlus.ElMessage.info('分块任务已启动，正在处理...');
+        await pollChunkStatus(f);
       } catch (e) {
+        f.status = 'parsed';
         ElementPlus.ElMessage.error(e.message || '分块失败');
       } finally {
         f._chunking = false;
       }
+    }
+
+    async function pollChunkStatus(f) {
+      const POLL_INTERVAL = 500;  // 500ms 轮询一次
+      const MAX_POLL_TIME = 600;  // 最长等待 10 分钟
+      let elapsed = 0;
+      
+      while (elapsed < MAX_POLL_TIME) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+        elapsed += POLL_INTERVAL;
+        
+        try {
+          const resp = await fetch(`${API_BASE}/api/index/status/${f.file_id}`);
+          if (!resp.ok) continue;
+          const status = await resp.json();
+          
+          // 更新本地文件状态
+          f.status = status.status;
+          f.progress = status.progress;
+          f.chunks_count = status.chunks_count;
+          f.chunk_method = status.chunk_method;
+          
+          if (status.status === 'done') {
+            ElementPlus.ElMessage.success(`「${f.file_name}」分块成功，切成 ${status.chunks_count} 块`);
+            await loadIndexedFiles();
+            return;
+          } else if (status.status === 'failed') {
+            ElementPlus.ElMessage.error(status.error || '分块失败');
+            await loadIndexedFiles();
+            return;
+          }
+        } catch (e) {
+          console.warn('轮询状态失败:', e);
+        }
+      }
+      
+      // 超时处理
+      ElementPlus.ElMessage.warning('分块超时，请刷新页面查看结果');
+      await loadIndexedFiles();
     }
 
     async function confirmDeleteFile(f) {
@@ -2597,7 +2670,7 @@ const app = createApp({
       onKeydown, send, autoResize, renderMarkdown,
       customUpload, loadIndexedFiles, confirmDeleteFile,
       chunkMethods, executeChunk, getChunkMethodLabel,
-      getFileIconClass, getFileIconText, formatSize, _looksLikeHtml,
+      getFileIconClass, getFileIconText, formatSize, looksLikeHtml,
       toggleThinking, formatThinkingTime,
       // 模型选择
       availableModels, selectedModelId, showModelDropdown,
@@ -2619,28 +2692,28 @@ const app = createApp({
 // 用法：<div v-echart="spec" style="width:100%;height:360px;"></div>
 app.directive('echart', {
   mounted(el, binding) {
-    if (!binding.value) return;
-    _ensureEcharts().then((echarts) => {
-      if (!echarts) {
-        el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">图表库加载失败，请检查网络</div>';
-        return;
-      }
-      try {
-        const chart = echarts.init(el);
-        chart.setOption(binding.value);
-        const ro = new ResizeObserver(() => chart.resize());
-        ro.observe(el);
-        // 记录到 DOM 上，方便后续 setOption 更新
-        el._echartsInstance = chart;
-      } catch (e) {
-        console.error('[v-echart] 渲染失败', e);
-        el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">图表渲染失败</div>';
-      }
+    console.log('[v-echart] mounted 触发', {
+      hasSpec: !!binding.value,
+      specType: binding.value ? typeof binding.value : 'null',
+      hasSeries: !!(binding.value && binding.value.series),
+      seriesLen: binding.value && binding.value.series ? binding.value.series.length : 'N/A',
+      rect: el.getBoundingClientRect(),
     });
+    _tryRenderChart(el, binding.value);
   },
   updated(el, binding) {
+    console.log('[v-echart] updated 触发', {
+      hasInstance: !!el._echartsInstance,
+      hasSpec: !!binding.value,
+      seriesLen: binding.value && binding.value.series ? binding.value.series.length : 'N/A',
+    });
     if (el._echartsInstance && binding.value) {
-      try { el._echartsInstance.setOption(binding.value); } catch (e) { /* ignore */ }
+      try { el._echartsInstance.setOption(binding.value, true); }
+      catch (e) { console.error('[v-echart] setOption 失败', e); }
+    } else if (!el._echartsInstance && binding.value) {
+      // 实例还没创建好（异步加载中），重新尝试渲染
+      console.log('[v-echart] 实例不存在，重新尝试渲染');
+      _tryRenderChart(el, binding.value);
     }
   },
   beforeUnmount(el) {
@@ -2650,6 +2723,66 @@ app.directive('echart', {
     }
   },
 });
+
+function _tryRenderChart(el, spec) {
+  console.log('[v-echart] _tryRenderChart 开始', {
+    hasSpec: !!spec,
+    specType: spec ? typeof spec : 'null',
+    isObj: spec && typeof spec === 'object',
+    hasSeries: !!(spec && spec.series),
+    seriesIsArray: !!(spec && Array.isArray(spec.series)),
+    seriesLen: spec && spec.series ? spec.series.length : 'N/A',
+  });
+  if (!spec) {
+    el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">暂无图表数据</div>';
+    return;
+  }
+  if (typeof spec !== 'object' || !Array.isArray(spec.series)) {
+    console.warn('[v-echart] chart_spec 无效，缺少 series 数组', spec);
+    el.innerHTML = '<div style="padding:16px;color:#f59e0b;font-size:13px;">图表数据格式无效</div>';
+    return;
+  }
+  if (spec.series.length === 0) {
+    const title = (spec.title && spec.title.text) || '暂无数据';
+    el.innerHTML = `<div style="padding:16px;color:#9ca3af;font-size:13px;text-align:center;">📭 ${title}</div>`;
+    return;
+  }
+  _ensureEcharts().then((echarts) => {
+    if (!echarts) {
+      el.innerHTML = '<div style="padding:16px;color:#9ca3af;font-size:13px;">图表库加载失败，请检查网络</div>';
+      return;
+    }
+    const tryInit = () => {
+      const rect = el.getBoundingClientRect();
+      console.log('[v-echart] tryInit 尝试初始化', { width: rect.width, height: rect.height });
+      if (rect.width < 50 || rect.height < 50) {
+        requestAnimationFrame(tryInit);
+        return;
+      }
+      try {
+        if (el._echartsInstance) { try { el._echartsInstance.dispose(); } catch (e) {} el._echartsInstance = null; }
+        const chart = echarts.init(el);
+        chart.setOption(spec);
+        const ro = new ResizeObserver(() => chart.resize());
+        ro.observe(el);
+        el._echartsInstance = chart;
+        console.log('[v-echart] ✅ 图表渲染成功', {
+          seriesCount: (spec.series || []).length,
+          chartType: spec.series[0]?.type,
+          title: spec.title?.text,
+        });
+      } catch (e) {
+        console.error('[v-echart] ❌ 图表渲染失败', e);
+        el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">图表渲染失败：' + (e.message || e) + '</div>';
+      }
+    };
+    tryInit();
+    setTimeout(tryInit, 500);
+  }).catch((err) => {
+    console.error('[v-echart] ECharts 加载 Promise 异常', err);
+    el.innerHTML = '<div style="padding:16px;color:#dc2626;font-size:13px;">ECharts 加载异常</div>';
+  });
+}
 
 for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, comp);

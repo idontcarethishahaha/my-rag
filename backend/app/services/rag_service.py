@@ -30,6 +30,23 @@ from .intent_service import classify_intent, INTENT_CHAT, INTENT_KB_QUERY, INTEN
 logger = logging.getLogger(__name__)
 
 
+def _make_agent_metadata(agent_type: str, agent_content: dict) -> dict:
+    """把 agent 输出序列化成可存 JSON 的 metadata。agent_content 可能含 numpy/pandas 等不可序列化类型，这里做安全降级。"""
+    import json as _json
+    # 简单清洗：递归把不可序列化类型转字符串
+    def _safe(obj, _depth=0):
+        if _depth > 10:
+            return str(obj)
+        if obj is None or isinstance(obj, (bool, int, float, str)):
+            return obj
+        if isinstance(obj, dict):
+            return {str(k): _safe(v, _depth + 1) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_safe(v, _depth + 1) for v in obj]
+        return str(obj)
+    return {"agent_output": {"type": agent_type, "content": _safe(agent_content)}}
+
+
 # ==================================
 # 工具：DocumentChunk → dict
 # ==================================
@@ -274,13 +291,47 @@ def ask_rag_stream(
 
         output_fmt = OUTPUT_TEXT  # 默认文本
         try:
-            output_fmt = detect_output_format(question)
+            output_fmt = detect_output_format(question, model=model)
         except Exception as _e_fmt:
             logger.warning(f"[rag_stream] 输出格式检测失败，回退到 text: {_e_fmt}")
 
         # 如果不是 text，且有检索结果，就走 agent 生成结构化输出
-        if output_fmt != OUTPUT_TEXT and chunks:
-            logger.info(f"[rag_stream] ✨ 输出格式={output_fmt}，检索 chunks={len(chunks)} 条 → 进入 agent 分支")
+        # 但置信度太低时（very_low，<0.3）不走 agent，因为没有有效数据可画图/表格
+        confidence = retrieval_debug.get("confidence", 0.0)
+
+        # ---- 特殊放宽：如果检测到 xlsx/csv 文件在知识库中，即使检索相关性低
+        #      ChartAgent/DataAgent 也可以直接读上传目录里的原始文件出图/出表 ----
+        def _has_kb_table_files() -> bool:
+            try:
+                from .indexer_service import get_file_list
+                kb_files = get_file_list() or []
+                for f in kb_files:
+                    ext = (f.get("file_ext") or "").lower()
+                    if ext in (".xlsx", ".xls", ".csv"):
+                        return True
+            except Exception:
+                pass
+            # 检索 chunks metadata 兜底
+            for c in chunks or []:
+                src = (
+                    getattr(c, "source_file", "")
+                    or (getattr(c, "metadata", None) or {}).get("source", "")
+                )
+                if src.lower().endswith((".xlsx", ".xls", ".csv")):
+                    return True
+            return False
+
+        is_table_intent = output_fmt in ("chart", "data_table")
+        has_table_source = is_table_intent and _has_kb_table_files()
+        _agent_enabled = (output_fmt != OUTPUT_TEXT) and (
+            (chunks and confidence >= 0.3) or has_table_source
+        )
+
+        if _agent_enabled:
+            logger.info(
+                f"[rag_stream] ✨ 输出格式={output_fmt}，检索 chunks={len(chunks)} 条 "
+                f"confidence={confidence:.2f} has_table_source={has_table_source} → 进入 agent 分支"
+            )
             agent = _AGENT_REGISTRY.get(output_fmt)
             if agent is None:
                 logger.warning(f"[rag_stream] output_fmt={output_fmt} 没有注册 agent，回退文本")
@@ -303,12 +354,13 @@ def ask_rag_stream(
                     agent_payload = {"type": agent_result["type"], "content": agent_result["content"]}
                     yield {"event": "agent_output", "data": agent_payload}
                     logger.info(f"[rag_stream] ✅ agent_output 事件已推送，type={agent_result['type']}")
-                    # 写记忆（只存文字摘要）
-                    memory.append(session_id, question, agent_result["content"].get("text", ""))
+                    # 写记忆（文字 + agent 完整输出，支持刷新后恢复图表/表格）
+                    _agent_text = agent_result["content"].get("text", "")
+                    _agent_meta = _make_agent_metadata(agent_result["type"], agent_result["content"])
+                    memory.append(session_id, question, _agent_text, metadata=_agent_meta)
                     yield {"event": "done", "data": {"agent_type": output_fmt}}
                     return
                 except Exception as _e_agent:
-                    import traceback
                     logger.warning(
                         f"[rag_stream] ❌ agent 异常，回退文本: {_e_agent}\n{traceback.format_exc()}"
                     )

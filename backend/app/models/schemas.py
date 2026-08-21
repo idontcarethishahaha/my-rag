@@ -108,6 +108,7 @@ class ConversationInfo(BaseModel):
 class MessageItem(BaseModel):
     role: str   # user / assistant
     content: str
+    metadata: Optional[dict[str, Any]] = None
 
 
 # ---------- 通用 ----------

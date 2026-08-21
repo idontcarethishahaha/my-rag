@@ -124,6 +124,7 @@ def get_conversation_messages(session_id: str):
         MessageItem(
             role="ai" if m.role == "assistant" else m.role,
             content=m.content,
+            metadata=m.metadata,
         )
         for m in msgs
     ]

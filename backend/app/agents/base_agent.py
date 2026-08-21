@@ -1,4 +1,5 @@
 """BaseAgent：所有输出格式智能体的抽象基类 + 输出格式检测。"""
+from __future__ import annotations
 
 import json
 import logging
@@ -19,24 +20,30 @@ VALID_OUTPUTS = {OUTPUT_TEXT, OUTPUT_CHART, OUTPUT_REPORT, OUTPUT_DATA}
 _KEYWORD_RULES: list[tuple[set[str], str]] = [
     (
         {
-            "柱状图", "条形图", "折线图", "饼图", "散点图", "雷达图",
+            # 中文图表类型（含口语化变体）
+            "柱状图", "条形图", "折线图", "饼图", "饼状图", "散点图", "雷达图",
             "热力图", "漏斗图", "仪表盘", "直方图", "面积图",
             "对比图", "趋势图", "分布图", "占比图", "可视化",
-            "bar chart", "line chart", "pie chart", "chart", "graph", "plot",
+            "曲线图", "堆叠图", "环形图", "玫瑰图", "K线图",
+            "画个图", "做个图", "生成图", "出个图", "绘图", "画图", "图表",
+            # 英文
+            "bar chart", "line chart", "pie chart", "chart", "graph", "plot", "visual",
+            "diagram", "histogram", "scatter", "radar", "funnel",
         },
         OUTPUT_CHART,
     ),
     (
         {
             "数据表格", "数据表", "表格", "统计表", "对比表", "汇总表",
-            "数据对比", "统计一下", "汇总一下", "tabulate",
+            "数据对比", "统计一下", "汇总一下", "列个表", "做个表",
+            "tabulate", "table", "spreadsheet",
         },
         OUTPUT_DATA,
     ),
     (
         {
             "结构化报表", "报表", "报告", "汇总报告", "分析报告", "调研报告",
-            "总结报告", "分章节", "分章节介绍", "report",
+            "总结报告", "分章节", "分章节介绍", "report", "summary", "analysis",
         },
         OUTPUT_REPORT,
     ),
@@ -44,21 +51,34 @@ _KEYWORD_RULES: list[tuple[set[str], str]] = [
 
 
 def _rule_match_format(query: str) -> str | None:
+    """关键词匹配：先做精确子串匹配，再做模糊匹配（包含 2 字重叠即命中）。"""
     import re
     q = (query or "").lower()
+    # 第一轮：精确子串匹配
     for kw_set, fmt in _KEYWORD_RULES:
         for kw in kw_set:
             if "*" in kw or "." in kw or "+" in kw:
                 try:
                     if re.search(kw, q):
-                        logger.info(f"[agent_router] 规则命中 kw='{kw}' → {fmt}")
+                        logger.info(f"[agent_router] 规则命中(正则) kw='{kw}' → {fmt}")
                         return fmt
                 except re.error:
                     pass
             else:
                 if kw in q:
-                    logger.info(f"[agent_router] 规则命中 kw='{kw}' → {fmt}")
+                    logger.info(f"[agent_router] 规则命中(子串) kw='{kw}' → {fmt}")
                     return fmt
+    # 第二轮：模糊匹配——取关键词的 2 字前缀做包含匹配（处理口语化变体如"饼状图"→"饼"）
+    _FUZZY_PREFIXES = {
+        OUTPUT_CHART: {"饼", "柱", "条", "折", "散", "雷", "热", "漏", "仪", "直", "面", "曲", "堆", "环", "玫", "图", "chart", "graph", "plot"},
+        OUTPUT_DATA: {"表", "tab", "tab"},
+        OUTPUT_REPORT: {"报", "report", "summ", "analy"},
+    }
+    for fmt, prefixes in _FUZZY_PREFIXES.items():
+        for pfx in prefixes:
+            if pfx in q:
+                logger.info(f"[agent_router] 规则命中(模糊) pfx='{pfx}' → {fmt}")
+                return fmt
     return None
 
 # 意图检测 prompt（复用 intent_service 的 LLM 调用模式）
@@ -124,33 +144,25 @@ class BaseAgent(ABC):
 def detect_output_format(query: str, model: str | None = None) -> str:
     """检测用户问题最适合的输出格式。
 
-    优先用关键词规则前置匹配（省 API + 避免误判），规则未命中再走 glm-4-flash LLM。
+    优先用关键词规则前置匹配（省 API + 避免误判），规则未命中再走 LLM。
+    LLM 调用走 provider_service（与主链路一致），支持多 Provider。
     """
     # 1) 规则前置匹配：命中直接返回
     rule_fmt = _rule_match_format(query)
     if rule_fmt:
         return rule_fmt
 
-    from langchain_openai import ChatOpenAI
-    from ..config import API_KEY as OPENAI_API_KEY, BASE_URL as OPENAI_BASE_URL
-
-    user_msg = _FORMAT_DETECT_USER.format(query=query)
-    messages = [
-        {"role": "system", "content": _FORMAT_DETECT_SYSTEM},
-        {"role": "user", "content": user_msg},
-    ]
-
+    # 2) LLM 检测：复用 generator_service 的配置（支持多 Provider）
     try:
-        llm = ChatOpenAI(
-            model=model or "glm-4-flash",
-            api_key=OPENAI_API_KEY or "placeholder",
-            base_url=OPENAI_BASE_URL,
-            temperature=0.0,
-            max_tokens=64,
-            streaming=False,
-        )
-        resp = llm.invoke(messages)
-        raw = (resp.content or "").strip()
+        from ..services.generator_service import chat
+        user_msg = _FORMAT_DETECT_USER.format(query=query)
+        messages = [
+            {"role": "system", "content": _FORMAT_DETECT_SYSTEM},
+            {"role": "user", "content": user_msg},
+        ]
+        # 用指定模型或默认 Provider，温度 0 保证确定性
+        result, _ = chat(messages, model=model)
+        raw = (result or "").strip()
 
         # 去掉可能的 markdown 包裹
         if raw.startswith("```"):

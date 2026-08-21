@@ -8,6 +8,7 @@
   DELETE /api/index/{file_id}           删除一个文件的索引
 """
 from __future__ import annotations
+import threading
 import traceback
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -40,19 +41,34 @@ async def upload_and_parse(file: UploadFile = File(..., description="支持 PDF/
         raise HTTPException(status_code=500, detail=f"上传解析失败: {e}")
 
 
-@router.post("/{file_id}/chunk", response_model=ChunkResponse)
+@router.post("/{file_id}/chunk")
 def chunk_and_store(file_id: str, body: ChunkBody):
-    """第二步：按指定方式分块 + 嵌入 + 入库"""
-    try:
-        result = indexer_service.chunk_and_store(file_id, body.chunk_method)
-        return ChunkResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"分块入库失败: {e}")
+    """第二步：按指定方式分块 + 嵌入 + 入库（后台线程执行，立即返回）"""
+    # 先校验是否可分块
+    st = indexer_service.get_status(file_id)
+    if not st:
+        raise HTTPException(status_code=404, detail=f"未找到 file_id={file_id}")
+    if st["status"] == "done":
+        raise HTTPException(status_code=400, detail="文件已分块入库，如需重新分块请先删除后重新上传")
+    if st["status"] == "indexing":
+        raise HTTPException(status_code=400, detail="文件正在分块中，请勿重复提交")
+
+    # 后台线程执行分块
+    def _run():
+        try:
+            indexer_service.chunk_and_store(file_id, body.chunk_method)
+        except Exception as e:
+            traceback.print_exc()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+    return {
+        "file_id": file_id,
+        "file_name": st["file_name"],
+        "status": "indexing",
+        "message": "分块任务已启动，请轮询进度",
+    }
 
 
 @router.get("/methods", response_model=list[ChunkMethodItem])
